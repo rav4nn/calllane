@@ -9,13 +9,15 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - run: swift test --skip AudioSystemTests   # live CoreAudio tests need a real output device
-      - run: make release
-      - name: Note the cask sha
-        run: shasum -a 256 build/CallLane.zip > build/sha256.txt
+      - name: Tag must match the app version
+        run: test "v$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' Sources/CallLane/Info.plist)" = "$GITHUB_REF_NAME"
+      # Live CoreAudio suites need a real output device; EngineTests skips itself without the driver.
+      - run: swift test --skip AudioSystemTests
+      - run: make release   # app, driver, package, zip, sha256.txt, and the rendered cask
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             build/CallLane.zip
             build/sha256.txt
+            build/calllane.rb
           body_path: build/sha256.txt

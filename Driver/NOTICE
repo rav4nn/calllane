@@ -5,7 +5,9 @@ This folder is a derivative of BlackHole by Existential Audio Inc.
 https://github.com/ExistentialAudio/BlackHole, version 0.7.1, commit ffcb744.
 BlackHole is (c) 2019-2026 Existential Audio Inc. and is licensed under the
 GNU General Public License v3.0. The full licence text is in LICENSE in this
-folder. This folder is distributed under the same licence.
+folder. This folder is distributed under the same licence. The source of this
+derivative is the Driver/ folder of https://github.com/rav4nn/calllane, at the
+tag that matches the installed version.
 
 Changes to BlackHole/BlackHole.c:
 

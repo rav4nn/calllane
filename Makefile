@@ -24,7 +24,7 @@ DRIVER_DEFINES = \
 	-DkLatency_Frame_Size=0 \
 	-DkSampleRates=48000
 
-.PHONY: build run test driver pkg install-driver release snap clean
+.PHONY: build run test driver pkg install-driver uninstall-driver release snap clean
 
 build:
 	swift build -c release
@@ -50,19 +50,34 @@ driver:
 	clang -bundle -O2 -framework CoreAudio -framework CoreFoundation -framework Accelerate \
 		$(DRIVER_DEFINES) -o $(DRIVER)/Contents/MacOS/$(APP) Driver/BlackHole.c
 	sed 's/@VERSION@/$(VERSION)/' Driver/Info.plist > $(DRIVER)/Contents/Info.plist
+	mkdir -p $(DRIVER)/Contents/Resources
+	cp Driver/LICENSE Driver/NOTICE $(DRIVER)/Contents/Resources/   # GPL-3: the licence ships with the binary
 	codesign --force --sign - $(DRIVER)
 
+# --root with a fixed component plist: a plain --component pkg is relocatable, and Installer
+# could then update a stray build/CallLane.driver instead of the HAL folder.
 pkg: driver
-	pkgbuild --component $(DRIVER) --install-location $(HAL_DIR) \
-		--identifier dev.rav4nn.calllane.driver --version $(VERSION) \
-		--scripts Driver/pkg/scripts $(PKG)
+	rm -rf $(BUILD)/pkgroot && mkdir -p $(BUILD)/pkgroot
+	cp -R $(DRIVER) $(BUILD)/pkgroot/
+	pkgbuild --root $(BUILD)/pkgroot --component-plist Driver/pkg/component.plist \
+		--install-location $(HAL_DIR) --identifier dev.rav4nn.calllane.driver \
+		--version $(VERSION) --scripts Driver/pkg/scripts $(PKG)
 
 install-driver: pkg
 	sudo installer -pkg $(PKG) -target /
 
-release: build
-	cd $(BUILD) && ditto -c -k --keepParent $(APP).app $(APP).zip
-	shasum -a 256 $(BUILD)/$(APP).zip
+uninstall-driver:
+	sudo rm -rf $(HAL_DIR)/$(APP).driver
+	sudo pkgutil --forget dev.rav4nn.calllane.driver || true
+	sudo killall coreaudiod
+
+release: build pkg
+	rm -rf $(BUILD)/dist && mkdir -p $(BUILD)/dist
+	cp -R $(BUNDLE) $(BUILD)/dist/
+	cp $(PKG) $(BUILD)/dist/
+	cd $(BUILD)/dist && ditto -c -k --norsrc . ../$(APP).zip
+	shasum -a 256 $(BUILD)/$(APP).zip | tee $(BUILD)/sha256.txt
+	sed -e 's/@VERSION@/$(VERSION)/' -e "s/@SHA256@/$$(cut -d' ' -f1 $(BUILD)/sha256.txt)/" Casks/calllane.rb > $(BUILD)/calllane.rb
 
 clean:
 	rm -rf .build $(BUILD)
