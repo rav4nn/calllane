@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key><string>English</string>
+    <key>CFBundleExecutable</key><string>CallLane</string>
+    <key>CFBundleIdentifier</key><string>dev.rav4nn.calllane.driver</string>
+    <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+    <key>CFBundleName</key><string>CallLane</string>
+    <key>CFBundlePackageType</key><string>BNDL</string>
+    <key>CFBundleShortVersionString</key><string>@VERSION@</string>
+    <key>CFBundleSignature</key><string>????</string>
+    <key>CFBundleVersion</key><string>1</string>
+    <key>NSHumanReadableCopyright</key><string>Derived from BlackHole, © Existential Audio Inc. GPL-3.</string>
+    <key>CFPlugInFactories</key>
+    <dict>
+        <key>e395c745-4eea-4d94-bb92-46224221047c</key><string>BlackHole_Create</string>
+    </dict>
+    <key>CFPlugInTypes</key>
+    <dict>
+        <key>443ABAB8-E7B3-491A-B985-BEB9187030DB</key>
+        <array><string>e395c745-4eea-4d94-bb92-46224221047c</string></array>
+    </dict>
+</dict>
+</plist>
