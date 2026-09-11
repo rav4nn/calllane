@@ -45,7 +45,7 @@ Or build from source with the Xcode Command Line Tools: `git clone`, then `make 
 
 1. Launch CallLane. A phone icon appears in the menu bar. It creates the `CallLane` device.
 2. In each call app, pick `CallLane` as the speaker. Once per app. The setup guide in the
-   menu lists the exact path for FaceTime, Zoom, Meet, Slack, Teams, Discord, WhatsApp.
+   menu lists the exact path for FaceTime, Zoom, Meet, Slack, Teams, Discord.
 3. Keep your headphones as the system output. Keep the microphone on your Mac's
    built-in mic or a USB mic, and turn on Lock input.
 
@@ -68,6 +68,8 @@ and the call plays through those headphones, so the call follows.
 - Volume keys do nothing while `CallLane` is the system output. CallLane reverts that
   selection and tells you.
 - Safari has no per-site speaker picker, so calls in Safari cannot use `CallLane`.
+- WhatsApp is a Mac Catalyst app. Its speaker picker uses the iOS audio route API, which
+  lists only physical devices, so `CallLane` never appears there.
 - Spatial Audio and head tracking may not apply to the call on `CallLane`.
 - Tested on macOS 26 with AirPods Pro 3. Runs on macOS 14 and later.
 

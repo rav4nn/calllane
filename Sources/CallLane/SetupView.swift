@@ -8,7 +8,6 @@ struct SetupView: View {
         ("Slack", "Preferences → Audio & video → Speaker → CallLane"),
         ("Microsoft Teams", "Settings → Devices → Speaker → CallLane"),
         ("Discord", "User Settings → Voice & Video → Output Device → CallLane"),
-        ("WhatsApp", "Settings → Calls → Speaker → CallLane"),
     ]
 
     var body: some View {
@@ -36,7 +35,7 @@ struct SetupView: View {
             }
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
 
-            Text("Safari has no per-site speaker picker, so calls in Safari cannot use CallLane.")
+            Text("Safari has no per-site speaker picker, and WhatsApp lists only physical devices, so calls in those two cannot use CallLane.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
