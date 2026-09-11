@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SetupView: View {
     private let apps: [(String, String)] = [
+        ("WhatsApp", "Settings → Calls → Speaker → CallLane"),
         ("FaceTime", "Menu bar → Video → Output → CallLane"),
         ("Zoom", "Settings → Audio → Speaker → CallLane"),
         ("Google Meet (Chrome)", "In a call: speaker menu in the bottom bar → CallLane. Or ⋮ → Settings → Audio → Speakers"),
@@ -35,7 +36,7 @@ struct SetupView: View {
             }
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
 
-            Text("Safari has no per-site speaker picker, and WhatsApp lists only physical devices, so calls in those two cannot use CallLane.")
+            Text("Safari has no per-site speaker picker, so calls in Safari cannot use CallLane.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
