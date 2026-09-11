@@ -18,10 +18,12 @@ No drivers. No kernel extensions. No permission prompts.
 ## Install
 
 ```sh
+brew trust --tap rav4nn/tap
 brew install --cask --no-quarantine rav4nn/tap/calllane
 ```
 
-`--no-quarantine` is needed because CallLane is signed ad-hoc, not with an Apple
+`brew trust` is needed on Homebrew 6, which loads third-party casks only from
+taps you trust. `--no-quarantine` is needed because CallLane is signed ad-hoc, not with an Apple
 Developer ID. Without it, macOS shows "cannot verify" and you must allow it under
 System Settings → Privacy & Security.
 
