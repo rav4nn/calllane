@@ -1,5 +1,3 @@
-# Template. `make release` renders build/calllane.rb with the version and sha filled in;
-# the workflow uploads that file. Copy it into rav4nn/homebrew-tap/Casks/.
 cask "calllane" do
   version "@VERSION@"
   sha256 "@SHA256@"

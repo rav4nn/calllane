@@ -71,6 +71,8 @@ uninstall-driver:
 	sudo pkgutil --forget dev.rav4nn.calllane.driver || true
 	sudo killall coreaudiod
 
+# Renders Casks/calllane.rb (a template) into build/calllane.rb with version and sha; the
+# workflow uploads it and the tap takes it as is.
 release: build pkg
 	rm -rf $(BUILD)/dist && mkdir -p $(BUILD)/dist
 	cp -R $(BUNDLE) $(BUILD)/dist/
