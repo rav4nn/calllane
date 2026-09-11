@@ -9,7 +9,7 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - run: swift test
+      - run: swift test --skip AudioSystemTests   # live CoreAudio tests need a real output device
       - run: make release
       - name: Note the cask sha
         run: shasum -a 256 build/CallLane.zip > build/sha256.txt
