@@ -201,23 +201,12 @@ struct MenuView: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 
-    /// Plain secondary text on macOS 14/15; the macOS 26 glass style is the only enhancement,
-    /// and it stays off the device cards (no glass on the content layer, never glass on glass).
-    /// `canImport` keeps the source building on the macOS 14 SDK, where `.glass` does not exist.
-    @ViewBuilder
+    /// Small secondary text on every macOS version. The glass button style was tried on
+    /// macOS 26 and rendered as filled pills, which reads as prominent; quit actions must not.
     private func footerButton(_ title: String, action: @escaping () -> Void) -> some View {
-        let button = Button(title, action: action)
+        Button(title, action: action)
+            .buttonStyle(.plain)
             .font(.callout)
             .foregroundStyle(.secondary)
-            .controlSize(.small)
-        #if canImport(FoundationModels) // ships with the macOS 26 SDK
-        if #available(macOS 26, *) {
-            button.buttonStyle(.glass)
-        } else {
-            button.buttonStyle(.plain)
-        }
-        #else
-        button.buttonStyle(.plain)
-        #endif
     }
 }
