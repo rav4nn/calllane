@@ -4,15 +4,27 @@ import Observation
 
 @Observable
 final class Controller {
-    static let callsName = "CallLane"
-    static let callsUID = "dev.rav4nn.calllane.calls"
+    /// The driver's output device, the one call apps pick.
+    static let callsUID = "CallLane_UID"
+    /// Its hidden input twin, the one the engine reads.
+    static let tapUID = "CallLane_2_UID"
+    /// The v0.1 aggregate device. Destroyed on sight.
+    static let legacyUID = "dev.rav4nn.calllane.calls"
+    private static let ownUIDs: Set<String> = [callsUID, tapUID, legacyUID]
 
     private let audio: AudioSystem
+    private let engine: EngineControl
     private let defaults: UserDefaults
+    private let appVersion: String
     private var tokens: [ListenerToken] = []
     private var runningToken: ListenerToken?
     private var runningWatched: AudioObjectID?
     private var pending: DispatchWorkItem?
+    /// The last real output the user had; where the system output goes back to when CallLane
+    /// must not stay the system output.
+    private var lastRealOutput: AudioObjectID?
+    private var tapID: AudioObjectID?
+    private var driverVersion: String?
 
     private(set) var devices: [AudioDevice] = []
     private(set) var defaultOutputID: AudioObjectID?
@@ -21,19 +33,31 @@ final class Controller {
     private(set) var callsInUse = false
     private(set) var status = ""
 
-    init(audio: AudioSystem, defaults: UserDefaults = .standard) {
+    init(audio: AudioSystem, engine: EngineControl, defaults: UserDefaults = .standard,
+         appVersion: String = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0") {
         self.audio = audio
+        self.engine = engine
         self.defaults = defaults
+        self.appVersion = appVersion
     }
 
     // MARK: derived
 
-    var outputs: [AudioDevice] { devices.filter { $0.hasOutput && $0.uid != Self.callsUID } }
-    var inputs: [AudioDevice] { devices.filter { $0.hasInput } }
+    var outputs: [AudioDevice] { devices.filter { $0.hasOutput && !Self.ownUIDs.contains($0.uid) } }
+    var inputs: [AudioDevice] { devices.filter { $0.hasInput && !Self.ownUIDs.contains($0.uid) } }
     var callsDevice: AudioDevice? { devices.first { $0.uid == Self.callsUID } }
-    var callsWraps: AudioDevice? {
-        guard let calls = callsDevice, let uid = audio.aggregateSubDeviceUID(calls.id) else { return nil }
-        return devices.first { $0.uid == uid }
+    var defaultOutputDevice: AudioDevice? { devices.first { $0.id == defaultOutputID } }
+
+    /// Non-nil when the driver is absent or older than the app. The panel shows it in place of
+    /// the CallLane status row.
+    var driverStatus: String? {
+        if callsDevice == nil || tapID == nil {
+            return "Driver not installed. Run `make install-driver` or reinstall the cask."
+        }
+        if let v = driverVersion, v.compare(appVersion, options: .numeric) == .orderedAscending {
+            return "Driver is v\(v), app is v\(appVersion). Reinstall the cask."
+        }
+        return nil
     }
 
     var inputLocked: Bool {
@@ -72,16 +96,19 @@ final class Controller {
 
     func reconcile() {
         refresh()
-        reconcileCalls()
+        trackRealOutput()
+        migrateLegacy()
+        keepCallsOffSystemOutput()
         reconcileInputLock()
         refresh()
         outputVolume = defaultOutputID.flatMap { audio.volume($0, scope: .output) }
         callsInUse = callsDevice.map { audio.isRunningSomewhere($0.id) } ?? false
+        reconcileEngine()
         watchRunning()
     }
 
     /// A call app opening CallLane fires no system-level event, so watch the device itself.
-    /// CallLane gets a new id whenever it is recreated; re-register when that happens.
+    /// The device gets a new id whenever coreaudiod restarts; re-register when that happens.
     private func watchRunning() {
         guard callsDevice?.id != runningWatched else { return }
         runningToken = nil
@@ -95,6 +122,16 @@ final class Controller {
         devices = audio.devices()
         defaultOutputID = audio.defaultOutput()
         defaultInputID = audio.defaultInput()
+        tapID = audio.deviceID(forUID: Self.tapUID)   // hidden: never trust the device list for it
+        driverVersion = audio.driverVersion()
+    }
+
+    /// Remembers the user's real output. A change of real output also clears any old message:
+    /// that is when the user has acted on it.
+    private func trackRealOutput() {
+        guard let id = defaultOutputID, outputs.contains(where: { $0.id == id }), id != lastRealOutput else { return }
+        lastRealOutput = id
+        status = ""
     }
 
     /// Runs one CoreAudio write that enforces an app invariant. A failure is never silent:
@@ -108,41 +145,43 @@ final class Controller {
         }
     }
 
-    /// The real output CallLane should wrap, or the system should fall back to: the wrapped
-    /// device when it is still present, else any real output device.
-    private func realOutput(for calls: AudioDevice) -> AudioDevice? {
-        if let uid = audio.aggregateSubDeviceUID(calls.id), let d = devices.first(where: { $0.uid == uid && $0.hasOutput }) {
-            return d
-        }
-        return outputs.first
+    private var fallbackOutput: AudioDevice? {
+        outputs.first { $0.id == lastRealOutput } ?? outputs.first
     }
 
-    private func reconcileCalls() {
-        guard let outID = defaultOutputID, let out = devices.first(where: { $0.id == outID }) else { return }
-        guard let calls = callsDevice else {
-            if attempt("Could not create CallLane", {
-                _ = try audio.createAggregate(name: Self.callsName, uid: Self.callsUID, subDeviceUID: out.uid)
-            }) { status = "" }
+    /// v0.1 created an aggregate device with this UID. Next to the driver's device it would
+    /// only confuse the pickers, so destroy it. Move the system output off it first.
+    private func migrateLegacy() {
+        guard let old = devices.first(where: { $0.uid == Self.legacyUID && $0.isAggregate }) else { return }
+        if defaultOutputID == old.id {
+            guard let real = fallbackOutput,
+                  attempt("Could not leave the old CallLane device", { try audio.setDefaultOutput(real.id) }) else { return }
+        }
+        attempt("Could not remove the old CallLane device", { try audio.destroyAggregate(old.id) })
+    }
+
+    /// CallLane must never be the system output: the engine would copy the device into itself.
+    private func keepCallsOffSystemOutput() {
+        guard let calls = callsDevice, defaultOutputID == calls.id else { return }
+        guard let real = fallbackOutput else {
+            status = "CallLane is the system output and no other output exists."
             return
         }
-        if calls.name != Self.callsName {   // device created by an older version
-            attempt("Could not rename \(calls.name)", { try audio.setName(calls.id, Self.callsName) })
+        if attempt("Could not leave CallLane", { try audio.setDefaultOutput(real.id) }) {
+            status = "CallLane is for call apps only. Output set back to \(real.name)."
         }
-        if out.uid == Self.callsUID {
-            // CallLane must never be the system output: the volume keys stop working.
-            guard let real = realOutput(for: calls) else {
-                status = "CallLane is the system output and no other output exists."
-                return
-            }
-            if attempt("Could not leave CallLane", { try audio.setDefaultOutput(real.id) }) {
-                status = "CallLane is for call apps only. Output set back to \(real.name)."
-            }
+    }
+
+    /// Copies the tap onto the real output while a call app uses CallLane; stops when idle.
+    /// The engine restarts on its own when the destination changes.
+    private func reconcileEngine() {
+        guard callsInUse, let tap = tapID, let out = defaultOutputID, out != callsDevice?.id else {
+            engine.stop()
             return
         }
-        if audio.aggregateSubDeviceUID(calls.id) != out.uid {
-            if attempt("Could not point CallLane at \(out.name)", { try audio.setAggregateSubDevice(calls.id, uid: out.uid) }) {
-                status = ""
-            }
+        let what = "Could not start the audio engine"
+        if attempt(what, { try engine.start(tap: tap, destination: out) }), status.hasPrefix(what) {
+            status = ""
         }
     }
 
@@ -178,20 +217,5 @@ final class Controller {
         guard let id = defaultOutputID else { return }
         try? audio.setVolume(id, scope: .output, value)
         outputVolume = audio.volume(id, scope: .output)
-    }
-
-    /// Moves the system output off CallLane first, then destroys it. Returns false and keeps
-    /// CallLane when the output cannot be moved, so macOS never holds a destroyed default.
-    @discardableResult
-    func removeCallsDevice() -> Bool {
-        refresh()
-        guard let calls = callsDevice else { return true }
-        if defaultOutputID == calls.id {
-            guard let real = realOutput(for: calls),
-                  attempt("Could not leave CallLane", { try audio.setDefaultOutput(real.id) }) else { return false }
-        }
-        let ok = attempt("Could not remove CallLane", { try audio.destroyAggregate(calls.id) })
-        refresh()
-        return ok
     }
 }

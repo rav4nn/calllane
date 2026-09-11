@@ -8,7 +8,6 @@ final class FakeAudioSystem: AudioSystem {
     var volumes: [AudioObjectID: Float] = [:]
     var inputVolumes: [AudioObjectID: Float] = [:]
     var running: Set<AudioObjectID> = []
-    var aggregates: [AudioObjectID: String] = [:]   // agg id -> sub-device uid
     var nextID: AudioObjectID = 1000
     var handlers: [AudioObjectID: [AudioObjectPropertySelector: () -> Void]] = [:]
     var failSetDefaultInput = false
@@ -39,17 +38,7 @@ final class FakeAudioSystem: AudioSystem {
     func isRunningSomewhere(_ id: AudioObjectID) -> Bool { running.contains(id) }
     func deviceID(forUID uid: String) -> AudioObjectID? { list.first { $0.uid == uid }?.id }
     func driverVersion() -> String? { installedDriverVersion }
-    func createAggregate(name: String, uid: String, subDeviceUID: String) throws -> AudioObjectID {
-        let id = addDevice(name, uid: uid, transport: kAudioDeviceTransportTypeAggregate)
-        aggregates[id] = subDeviceUID
-        return id
-    }
-    func aggregateSubDeviceUID(_ id: AudioObjectID) -> String? { aggregates[id] }
-    func setAggregateSubDevice(_ id: AudioObjectID, uid: String) throws { aggregates[id] = uid }
-    func setName(_ id: AudioObjectID, _ name: String) throws {
-        list = list.map { $0.id == id ? AudioDevice(id: $0.id, uid: $0.uid, name: name, transport: $0.transport, hasInput: $0.hasInput, hasOutput: $0.hasOutput) : $0 }
-    }
-    func destroyAggregate(_ id: AudioObjectID) throws { aggregates[id] = nil; remove(id) }
+    func destroyAggregate(_ id: AudioObjectID) throws { remove(id) }
     func listen(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector, _ handler: @escaping () -> Void) -> ListenerToken? {
         handlers[object, default: [:]][selector] = handler
         return ListenerToken.fake()

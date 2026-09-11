@@ -5,10 +5,13 @@ import CoreAudio
 
 @Suite struct ControllerTests {
     let fake = FakeAudioSystem()
+    let engine = FakeEngine()
     let defaults: UserDefaults
     let speakers: AudioObjectID
     let airpods: AudioObjectID
     let mic: AudioObjectID
+    let calls: AudioObjectID
+    let tap: AudioObjectID
 
     init() {
         let suite = "dev.rav4nn.calllane.tests.\(UUID().uuidString)"
@@ -17,39 +20,186 @@ import CoreAudio
         speakers = fake.addDevice("Speakers", uid: "spk")
         airpods = fake.addDevice("AirPods", uid: "ap:out")
         mic = fake.addDevice("Mac Mic", uid: "mic", input: true, output: false)
+        calls = fake.addDevice("CallLane", uid: Controller.callsUID, transport: kAudioDeviceTransportTypeUSB)
+        tap = fake.addDevice("CallLane Tap", uid: Controller.tapUID, input: true, output: false, transport: kAudioDeviceTransportTypeUSB)
         fake.defaultOut = airpods
         fake.defaultIn = mic
         fake.inputVolumes[mic] = 1.0
     }
 
-    func makeController() -> Controller {
-        let c = Controller(audio: fake, defaults: defaults)
+    func makeController(appVersion: String = "0.2.0") -> Controller {
+        let c = Controller(audio: fake, engine: engine, defaults: defaults, appVersion: appVersion)
         c.reconcile()
         return c
     }
 
-    @Test func createsCallsAroundDefaultOutput() {
+    // MARK: pickers
+
+    @Test func hidesOwnDevicesFromPickers() {
         let c = makeController()
-        #expect(c.callsDevice?.name == "CallLane")
-        #expect(c.callsWraps?.id == airpods)
-        #expect(!c.outputs.contains { $0.uid == Controller.callsUID }, "CallLane is hidden from the output picker")
+        #expect(c.callsDevice?.id == calls)
+        #expect(!c.outputs.contains { $0.id == calls })
+        #expect(!c.inputs.contains { $0.id == tap })
+        #expect(c.defaultOutputDevice?.id == airpods)
     }
 
-    @Test func callsFollowsDefaultOutput() {
-        let c = makeController()
-        fake.defaultOut = speakers
-        c.reconcile()
-        #expect(c.callsWraps?.id == speakers)
-    }
+    // MARK: CallLane must never be the system output
 
-    @Test func callsAsDefaultOutputReverts() {
+    @Test func callsAsDefaultOutputRevertsToPreviousOutput() {
         let c = makeController()
-        let calls = c.callsDevice!.id
         fake.defaultOut = calls
         c.reconcile()
         #expect(fake.defaultOut == airpods)
         #expect(c.status.contains("call apps only"))
     }
+
+    @Test func callsAsDefaultFallsBackToAnyRealOutputWhenPreviousIsGone() {
+        let c = makeController()
+        fake.remove(airpods)
+        fake.defaultOut = calls
+        c.reconcile()
+        #expect(fake.defaultOut == speakers)
+    }
+
+    @Test func statusClearsWhenTheUserPicksAnotherOutput() {
+        let c = makeController()
+        fake.defaultOut = calls
+        c.reconcile()
+        #expect(!c.status.isEmpty)
+        c.selectOutput(speakers)
+        #expect(c.status.isEmpty)
+    }
+
+    // MARK: migration from the v0.1 aggregate
+
+    @Test func migrationDestroysTheOldAggregate() {
+        let old = fake.addDevice("CallLane", uid: Controller.legacyUID, transport: kAudioDeviceTransportTypeAggregate)
+        let c = makeController()
+        #expect(fake.list.first { $0.id == old } == nil)
+        #expect(c.callsDevice?.id == calls)
+    }
+
+    @Test func migrationMovesTheOutputOffTheOldAggregateFirst() {
+        let old = fake.addDevice("CallLane", uid: Controller.legacyUID, transport: kAudioDeviceTransportTypeAggregate)
+        fake.defaultOut = old
+        _ = makeController()
+        #expect(fake.defaultOut == speakers || fake.defaultOut == airpods)
+        #expect(fake.list.first { $0.id == old } == nil)
+    }
+
+    @Test func migrationIgnoresAForeignDeviceWithTheOldUID() {
+        let usb = fake.addDevice("Odd", uid: Controller.legacyUID, transport: kAudioDeviceTransportTypeUSB)
+        _ = makeController()
+        #expect(fake.list.first { $0.id == usb } != nil, "only aggregates are destroyed")
+    }
+
+    // MARK: driver check
+
+    @Test func driverPresentAndCurrentHasNoDriverStatus() {
+        #expect(makeController().driverStatus == nil)
+    }
+
+    @Test func missingDriverSetsDriverStatus() {
+        fake.remove(calls)
+        fake.remove(tap)
+        let c = makeController()
+        #expect(c.driverStatus?.hasPrefix("Driver not installed.") == true)
+        #expect(c.driverStatus?.contains("make install-driver") == true)
+    }
+
+    @Test func missingTapAloneCountsAsMissingDriver() {
+        fake.remove(tap)
+        #expect(makeController().driverStatus?.hasPrefix("Driver not installed.") == true)
+    }
+
+    @Test func olderDriverAsksForReinstall() {
+        fake.installedDriverVersion = "0.1.0"
+        let c = makeController(appVersion: "0.2.0")
+        #expect(c.driverStatus == "Driver is v0.1.0, app is v0.2.0. Reinstall the cask.")
+    }
+
+    @Test func newerDriverIsFine() {
+        fake.installedDriverVersion = "0.10.0"
+        #expect(makeController(appVersion: "0.2.0").driverStatus == nil)
+    }
+
+    // MARK: engine lifecycle
+
+    @Test func engineStartsOnInUseAndStopsOnIdle() {
+        let c = makeController()
+        #expect(engine.running == nil)
+        fake.running.insert(calls)
+        c.reconcile()
+        #expect(c.callsInUse)
+        #expect(engine.running?.tap == tap)
+        #expect(engine.running?.destination == airpods)
+        fake.running.remove(calls)
+        c.reconcile()
+        #expect(!c.callsInUse)
+        #expect(engine.running == nil)
+    }
+
+    @Test func engineFollowsTheDefaultOutputWhileInUse() {
+        let c = makeController()
+        fake.running.insert(calls)
+        c.reconcile()
+        fake.defaultOut = speakers
+        c.reconcile()
+        #expect(engine.running?.destination == speakers)
+        #expect(engine.starts == 2)
+    }
+
+    @Test func engineDoesNotStartWithoutATap() {
+        fake.remove(tap)
+        let c = makeController()
+        fake.running.insert(calls)
+        c.reconcile()
+        #expect(engine.running == nil)
+    }
+
+    @Test func engineFailureIsVisibleAndClearsOnSuccess() {
+        let c = makeController()
+        engine.failStart = true
+        fake.running.insert(calls)
+        c.reconcile()
+        #expect(c.status.contains("Could not start the audio engine"))
+        engine.failStart = false
+        c.reconcile()
+        #expect(c.status.isEmpty)
+        #expect(engine.running != nil)
+    }
+
+    // MARK: in-use listener
+
+    @Test func callStartFlipsInUseWithoutPanelOpen() {
+        let c = makeController()
+        c.start()
+        let fire = fake.handlers[calls]?[kAudioDevicePropertyDeviceIsRunningSomewhere]
+        #expect(fire != nil, "running listener is registered on the CallLane device itself")
+        #expect(!c.callsInUse)
+        fake.running.insert(calls)
+        fire?()
+        #expect(c.callsInUse)
+        #expect(engine.running != nil)
+        fake.running.remove(calls)
+        fire?()
+        #expect(!c.callsInUse)
+        #expect(engine.running == nil)
+    }
+
+    @Test func reloadedDriverGetsAFreshRunningListener() {
+        let c = makeController()
+        c.start()
+        fake.remove(calls)                       // coreaudiod restarted: new object ids
+        fake.remove(tap)
+        let newCalls = fake.addDevice("CallLane", uid: Controller.callsUID, transport: kAudioDeviceTransportTypeUSB)
+        fake.addDevice("CallLane Tap", uid: Controller.tapUID, input: true, output: false, transport: kAudioDeviceTransportTypeUSB)
+        c.reconcile()
+        #expect(newCalls != calls)
+        #expect(fake.handlers[newCalls]?[kAudioDevicePropertyDeviceIsRunningSomewhere] != nil)
+    }
+
+    // MARK: input lock (unchanged behaviour)
 
     @Test func inputLockRevertsAndRestoresVolume() {
         let c = makeController()
@@ -72,16 +222,6 @@ import CoreAudio
         #expect(fake.defaultIn == usb)
     }
 
-    @Test func staleCallsAsDefaultFallsBackToAnyRealOutput() {
-        let c = makeController()
-        let calls = c.callsDevice!.id
-        fake.remove(airpods)                 // wrapped device unplugged
-        fake.defaultOut = calls              // and CallLane became the system output
-        c.reconcile()
-        #expect(fake.defaultOut == speakers)
-        #expect(c.status.contains("call apps only"))
-    }
-
     @Test func inputLockFailureIsVisible() {
         let c = makeController()
         c.inputLocked = true
@@ -91,63 +231,5 @@ import CoreAudio
         c.reconcile()
         #expect(fake.defaultIn == btMic)
         #expect(c.status.contains("Could not lock input"))
-    }
-
-    @Test func removeCallsDeviceWhileDefaultRestoresRealOutput() {
-        let c = makeController()
-        fake.defaultOut = c.callsDevice!.id
-        #expect(c.removeCallsDevice())
-        #expect(fake.defaultOut == airpods)
-        #expect(fake.list.first { $0.uid == Controller.callsUID } == nil)
-    }
-
-    @Test func removeCallsDevice() {
-        let c = makeController()
-        c.removeCallsDevice()
-        #expect(fake.list.first { $0.uid == Controller.callsUID } == nil)
-    }
-
-    @Test func callStartFlipsInUseWithoutPanelOpen() {
-        let c = makeController()
-        c.start()
-        let calls = c.callsDevice!.id
-        let fire = fake.handlers[calls]?[kAudioDevicePropertyDeviceIsRunningSomewhere]
-        #expect(fire != nil, "running listener is registered on the CallLane device itself")
-        #expect(!c.callsInUse)
-        fake.running.insert(calls)
-        fire?()
-        #expect(c.callsInUse)
-        fake.running.remove(calls)
-        fire?()
-        #expect(!c.callsInUse)
-    }
-
-    @Test func recreatedCallsGetsAFreshRunningListener() {
-        let c = makeController()
-        c.start()
-        let old = c.callsDevice!.id
-        fake.aggregates[old] = nil
-        fake.remove(old)
-        c.reconcile()
-        let new = c.callsDevice!.id
-        #expect(new != old)
-        #expect(fake.handlers[new]?[kAudioDevicePropertyDeviceIsRunningSomewhere] != nil)
-    }
-
-    @Test func renamesDeviceFromOlderVersion() {
-        let old = fake.addDevice("Calls", uid: Controller.callsUID, transport: kAudioDeviceTransportTypeAggregate)
-        fake.aggregates[old] = "ap:out"
-        let c = makeController()
-        #expect(c.callsDevice?.id == old, "reuses the device by UID")
-        #expect(c.callsDevice?.name == "CallLane")
-    }
-
-    @Test func renamesOldDeviceEvenWhenItIsTheSystemOutput() {
-        let old = fake.addDevice("Calls", uid: Controller.callsUID, transport: kAudioDeviceTransportTypeAggregate)
-        fake.aggregates[old] = "ap:out"
-        fake.defaultOut = old
-        let c = makeController()
-        #expect(fake.defaultOut == airpods)
-        #expect(c.callsDevice?.name == "CallLane")
     }
 }

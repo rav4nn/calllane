@@ -64,13 +64,8 @@ struct MenuView: View {
             }
 
             Divider()
-            VStack(alignment: .leading, spacing: 6) {
-                footerButton("Remove CallLane device and quit") {
-                    if controller.removeCallsDevice() { NSApp.terminate(nil) }
-                }
-                footerButton("Quit") { NSApp.terminate(nil) }
-                    .keyboardShortcut("q")
-            }
+            footerButton("Quit") { NSApp.terminate(nil) }
+                .keyboardShortcut("q")
         }
         .padding(16)
         .frame(width: 300)
@@ -174,18 +169,30 @@ struct MenuView: View {
 
     private var calls: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(controller.callsInUse ? Color.green : Color.secondary.opacity(0.4))
-                    .frame(width: 7, height: 7)
-                Text("CallLane → \(controller.callsWraps?.name ?? "no output")")
-                    .font(.body)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Spacer(minLength: 8)
-                Text(controller.callsInUse ? "in use" : "idle")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            if let problem = controller.driverStatus {
+                HStack(alignment: .top, spacing: 8) {
+                    Circle()
+                        .fill(Color.orange)
+                        .frame(width: 7, height: 7)
+                        .padding(.top, 6)
+                    Text(problem)
+                        .font(.body)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } else {
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(controller.callsInUse ? Color.green : Color.secondary.opacity(0.4))
+                        .frame(width: 7, height: 7)
+                    Text("CallLane → \(controller.defaultOutputDevice?.name ?? "no output")")
+                        .font(.body)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer(minLength: 8)
+                    Text(controller.callsInUse ? "in use" : "idle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             if !controller.status.isEmpty {
                 note(controller.status, color: .orange)

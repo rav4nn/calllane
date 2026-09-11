@@ -11,7 +11,7 @@ struct CallLaneApp: App {
     private let loginItem = LoginItem()
 
     init() {
-        controller = Controller(audio: CoreAudioSystem())
+        controller = Controller(audio: CoreAudioSystem(), engine: Engine())
         controller.start()
         // `scripts/snap.sh` screenshots this window: the menu bar popover cannot be captured.
         if CommandLine.arguments.contains("--preview") { showPreviewWindow() }
