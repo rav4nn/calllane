@@ -14,6 +14,13 @@ import Foundation
         let agg = try audio.createAggregate(name: "CallLane Test", uid: uid, subDeviceUID: outDevice.uid)
         defer { try? audio.destroyAggregate(agg) }
 
+        // coreaudiod publishes a new aggregate asynchronously: the create call can return
+        // before the device list and the UID table know about it. Wait, up to a second.
+        for _ in 0..<40 {
+            if audio.deviceID(forUID: uid) != nil, audio.devices().contains(where: { $0.uid == uid }) { break }
+            Thread.sleep(forTimeInterval: 0.025)
+        }
+
         #expect(audio.deviceID(forUID: uid) == agg)
         #expect(audio.deviceID(forUID: "dev.rav4nn.calllane.no-such-device") == nil)
         #expect(audio.volume(agg, scope: .output) == nil, "aggregates have no volume control")
