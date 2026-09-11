@@ -10,6 +10,11 @@ high-quality listening profile instead of the headset profile.
 
 No drivers. No kernel extensions. No permission prompts.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/panel-dark.png">
+  <img src="docs/panel-light.png" alt="CallLane panel: output and input pickers, volume slider, Calls status row" width="340">
+</picture>
+
 ## Install
 
 ```sh
