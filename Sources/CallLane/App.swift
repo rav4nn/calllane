@@ -49,7 +49,7 @@ struct CallLaneApp: App {
         MenuBarExtra {
             MenuView(controller: controller, loginItem: loginItem)
         } label: {
-            Image(systemName: controller.callsInUse ? "phone.circle.fill" : "phone.circle")
+            Image(systemName: controller.callsInUse ? "phone.fill" : "phone")
         }
         .menuBarExtraStyle(.window)
 
