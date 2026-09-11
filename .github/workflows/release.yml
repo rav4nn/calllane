@@ -1,0 +1,21 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+jobs:
+  build:
+    runs-on: macos-14
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift test
+      - run: make release
+      - name: Note the cask sha
+        run: shasum -a 256 build/CallLane.zip > build/sha256.txt
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            build/CallLane.zip
+            build/sha256.txt
+          body_path: build/sha256.txt
