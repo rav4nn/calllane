@@ -106,4 +106,31 @@ import CoreAudio
         c.removeCallsDevice()
         #expect(fake.list.first { $0.uid == Controller.callsUID } == nil)
     }
+
+    @Test func callStartFlipsInUseWithoutPanelOpen() {
+        let c = makeController()
+        c.start()
+        let calls = c.callsDevice!.id
+        let fire = fake.handlers[calls]?[kAudioDevicePropertyDeviceIsRunningSomewhere]
+        #expect(fire != nil, "running listener is registered on the Calls device itself")
+        #expect(!c.callsInUse)
+        fake.running.insert(calls)
+        fire?()
+        #expect(c.callsInUse)
+        fake.running.remove(calls)
+        fire?()
+        #expect(!c.callsInUse)
+    }
+
+    @Test func recreatedCallsGetsAFreshRunningListener() {
+        let c = makeController()
+        c.start()
+        let old = c.callsDevice!.id
+        fake.aggregates[old] = nil
+        fake.remove(old)
+        c.reconcile()
+        let new = c.callsDevice!.id
+        #expect(new != old)
+        #expect(fake.handlers[new]?[kAudioDevicePropertyDeviceIsRunningSomewhere] != nil)
+    }
 }

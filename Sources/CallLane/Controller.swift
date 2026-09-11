@@ -10,6 +10,8 @@ final class Controller {
     private let audio: AudioSystem
     private let defaults: UserDefaults
     private var tokens: [ListenerToken] = []
+    private var runningToken: ListenerToken?
+    private var runningWatched: AudioObjectID?
     private var pending: DispatchWorkItem?
 
     private(set) var devices: [AudioDevice] = []
@@ -52,7 +54,9 @@ final class Controller {
     func start() {
         reconcile()
         for sel in [kAudioHardwarePropertyDevices, kAudioHardwarePropertyDefaultOutputDevice, kAudioHardwarePropertyDefaultInputDevice] {
-            tokens.append(audio.listen(sel) { [weak self] in self?.scheduleReconcile() })
+            if let t = audio.listen(AudioObjectID(kAudioObjectSystemObject), sel, { [weak self] in self?.scheduleReconcile() }) {
+                tokens.append(t)
+            }
         }
     }
 
@@ -73,6 +77,18 @@ final class Controller {
         refresh()
         outputVolume = defaultOutputID.flatMap { audio.volume($0, scope: .output) }
         callsInUse = callsDevice.map { audio.isRunningSomewhere($0.id) } ?? false
+        watchRunning()
+    }
+
+    /// A call app opening Calls fires no system-level event, so watch the device itself.
+    /// Calls gets a new id whenever it is recreated; re-register when that happens.
+    private func watchRunning() {
+        guard callsDevice?.id != runningWatched else { return }
+        runningToken = nil
+        runningWatched = nil
+        guard let calls = callsDevice else { return }
+        runningToken = audio.listen(calls.id, kAudioDevicePropertyDeviceIsRunningSomewhere) { [weak self] in self?.reconcile() }
+        if runningToken != nil { runningWatched = calls.id }   // a failed registration retries next reconcile
     }
 
     private func refresh() {

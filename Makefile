@@ -16,8 +16,12 @@ build:
 run: build
 	open $(BUNDLE)
 
+# Command Line Tools keep the Swift Testing macro plugin in a folder swiftc does not search.
+TESTING_PLUGINS = /Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing
+TEST_FLAGS = $(if $(wildcard $(TESTING_PLUGINS)),-Xswiftc -plugin-path -Xswiftc $(TESTING_PLUGINS))
+
 test:
-	swift test
+	swift test $(TEST_FLAGS)
 
 release: build
 	cd $(BUILD) && ditto -c -k --keepParent $(APP).app $(APP).zip

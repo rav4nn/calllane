@@ -10,7 +10,7 @@ final class FakeAudioSystem: AudioSystem {
     var running: Set<AudioObjectID> = []
     var aggregates: [AudioObjectID: String] = [:]   // agg id -> sub-device uid
     var nextID: AudioObjectID = 1000
-    var handlers: [AudioObjectPropertySelector: () -> Void] = [:]
+    var handlers: [AudioObjectID: [AudioObjectPropertySelector: () -> Void]] = [:]
     var failSetDefaultInput = false
 
     @discardableResult
@@ -44,8 +44,8 @@ final class FakeAudioSystem: AudioSystem {
     func aggregateSubDeviceUID(_ id: AudioObjectID) -> String? { aggregates[id] }
     func setAggregateSubDevice(_ id: AudioObjectID, uid: String) throws { aggregates[id] = uid }
     func destroyAggregate(_ id: AudioObjectID) throws { aggregates[id] = nil; remove(id) }
-    func listen(_ selector: AudioObjectPropertySelector, _ handler: @escaping () -> Void) -> ListenerToken {
-        handlers[selector] = handler
+    func listen(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector, _ handler: @escaping () -> Void) -> ListenerToken? {
+        handlers[object, default: [:]][selector] = handler
         return ListenerToken.fake()
     }
 }

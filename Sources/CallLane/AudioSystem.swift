@@ -56,7 +56,8 @@ protocol AudioSystem {
     func aggregateSubDeviceUID(_ id: AudioObjectID) -> String?
     func setAggregateSubDevice(_ id: AudioObjectID, uid: String) throws
     func destroyAggregate(_ id: AudioObjectID) throws
-    func listen(_ selector: AudioObjectPropertySelector, _ handler: @escaping () -> Void) -> ListenerToken
+    /// Returns nil when CoreAudio refuses the registration.
+    func listen(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector, _ handler: @escaping () -> Void) -> ListenerToken?
 }
 
 final class CoreAudioSystem: AudioSystem {
@@ -195,12 +196,15 @@ final class CoreAudioSystem: AudioSystem {
         if status != noErr { throw AudioError(what: "destroy aggregate", status: status) }
     }
 
-    func listen(_ selector: AudioObjectPropertySelector, _ handler: @escaping () -> Void) -> ListenerToken {
+    func listen(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector, _ handler: @escaping () -> Void) -> ListenerToken? {
         let addr = address(selector)
         let block: AudioObjectPropertyListenerBlock = { _, _ in handler() }
         var a = addr
-        let status = AudioObjectAddPropertyListenerBlock(system, &a, .main, block)
-        if status != noErr { log.error("listener \(selector) failed: \(status)") }
-        return ListenerToken(object: system, address: addr, block: block)
+        let status = AudioObjectAddPropertyListenerBlock(object, &a, .main, block)
+        guard status == noErr else {
+            log.error("listener \(selector) on \(object) failed: \(status)")
+            return nil
+        }
+        return ListenerToken(object: object, address: addr, block: block)
     }
 }
