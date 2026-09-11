@@ -12,6 +12,7 @@ final class FakeAudioSystem: AudioSystem {
     var nextID: AudioObjectID = 1000
     var handlers: [AudioObjectID: [AudioObjectPropertySelector: () -> Void]] = [:]
     var failSetDefaultInput = false
+    var installedDriverVersion: String? = "0.2.0"
 
     @discardableResult
     func addDevice(_ name: String, uid: String, input: Bool = false, output: Bool = true, transport: UInt32 = 0) -> AudioObjectID {
@@ -36,6 +37,8 @@ final class FakeAudioSystem: AudioSystem {
         if scope == .output { volumes[id] = value } else { inputVolumes[id] = value }
     }
     func isRunningSomewhere(_ id: AudioObjectID) -> Bool { running.contains(id) }
+    func deviceID(forUID uid: String) -> AudioObjectID? { list.first { $0.uid == uid }?.id }
+    func driverVersion() -> String? { installedDriverVersion }
     func createAggregate(name: String, uid: String, subDeviceUID: String) throws -> AudioObjectID {
         let id = addDevice(name, uid: uid, transport: kAudioDeviceTransportTypeAggregate)
         aggregates[id] = subDeviceUID

@@ -52,6 +52,10 @@ protocol AudioSystem {
     func volume(_ id: AudioObjectID, scope: AudioScope) -> Float?
     func setVolume(_ id: AudioObjectID, scope: AudioScope, _ value: Float) throws
     func isRunningSomewhere(_ id: AudioObjectID) -> Bool
+    /// Resolves a device UID; nil when no device has it. Finds hidden devices too.
+    func deviceID(forUID uid: String) -> AudioObjectID?
+    /// `CFBundleShortVersionString` of the installed CallLane driver; nil when not installed.
+    func driverVersion() -> String?
     func createAggregate(name: String, uid: String, subDeviceUID: String) throws -> AudioObjectID
     func aggregateSubDeviceUID(_ id: AudioObjectID) -> String?
     func setAggregateSubDevice(_ id: AudioObjectID, uid: String) throws
@@ -62,7 +66,14 @@ protocol AudioSystem {
 }
 
 final class CoreAudioSystem: AudioSystem {
+    static let driverPlist = "/Library/Audio/Plug-Ins/HAL/CallLane.driver/Contents/Info.plist"
+
     private let system = AudioObjectID(kAudioObjectSystemObject)
+    private let driverPlist: String
+
+    init(driverPlist: String = CoreAudioSystem.driverPlist) {
+        self.driverPlist = driverPlist
+    }
 
     private func address(_ selector: AudioObjectPropertySelector,
                          _ scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal,
@@ -160,6 +171,22 @@ final class CoreAudioSystem: AudioSystem {
 
     func isRunningSomewhere(_ id: AudioObjectID) -> Bool {
         (get(id, address(kAudioDevicePropertyDeviceIsRunningSomewhere), UInt32(0)) ?? 0) != 0
+    }
+
+    func deviceID(forUID uid: String) -> AudioObjectID? {
+        var a = address(kAudioHardwarePropertyTranslateUIDToDevice)
+        var cf = uid as CFString
+        var id: AudioObjectID = 0
+        var size = UInt32(MemoryLayout<AudioObjectID>.size)
+        let status = withUnsafePointer(to: &cf) {
+            AudioObjectGetPropertyData(system, &a, UInt32(MemoryLayout<CFString>.size), $0, &size, &id)
+        }
+        // An unknown UID answers noErr with kAudioObjectUnknown (0).
+        return status == noErr && id != 0 ? id : nil
+    }
+
+    func driverVersion() -> String? {
+        NSDictionary(contentsOfFile: driverPlist)?["CFBundleShortVersionString"] as? String
     }
 
     func createAggregate(name: String, uid: String, subDeviceUID: String) throws -> AudioObjectID {

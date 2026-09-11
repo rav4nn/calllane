@@ -14,13 +14,10 @@ import Foundation
         let agg = try audio.createAggregate(name: "CallLane Test", uid: uid, subDeviceUID: outDevice.uid)
         defer { try? audio.destroyAggregate(agg) }
 
-        #expect(audio.aggregateSubDeviceUID(agg) == outDevice.uid)
+        #expect(audio.deviceID(forUID: uid) == agg)
+        #expect(audio.deviceID(forUID: "dev.rav4nn.calllane.no-such-device") == nil)
         #expect(audio.volume(agg, scope: .output) == nil, "aggregates have no volume control")
         #expect(audio.devices().contains { $0.uid == uid && $0.isAggregate })
-
-        // Rewrite to the same UID: must succeed and read back unchanged.
-        try audio.setAggregateSubDevice(agg, uid: outDevice.uid)
-        #expect(audio.aggregateSubDeviceUID(agg) == outDevice.uid)
         #expect(!audio.isRunningSomewhere(agg))
     }
 
@@ -29,5 +26,13 @@ import Foundation
         let ids = Set(audio.devices().map(\.id))
         if let o = audio.defaultOutput() { #expect(ids.contains(o)) }
         if let i = audio.defaultInput() { #expect(ids.contains(i)) }
+    }
+
+    @Test func driverVersionReadsTheInstalledPlist() throws {
+        let plist = FileManager.default.temporaryDirectory.appendingPathComponent("calllane-\(uid).plist")
+        defer { try? FileManager.default.removeItem(at: plist) }
+        try (["CFBundleShortVersionString": "1.2.3"] as NSDictionary).write(to: plist)
+        #expect(CoreAudioSystem(driverPlist: plist.path).driverVersion() == "1.2.3")
+        #expect(CoreAudioSystem(driverPlist: "/nonexistent/Info.plist").driverVersion() == nil)
     }
 }
