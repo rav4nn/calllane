@@ -12,6 +12,9 @@ final class FakeAudioSystem: AudioSystem {
     var handlers: [AudioObjectID: [AudioObjectPropertySelector: () -> Void]] = [:]
     var failSetDefaultInput = false
     var installedDriverVersion: String? = "0.2.0"
+    var micAllowed: Bool? = true
+    var micRequests = 0
+    var pendingMic: (() -> Void)?
 
     @discardableResult
     func addDevice(_ name: String, uid: String, input: Bool = false, output: Bool = true, transport: UInt32 = 0) -> AudioObjectID {
@@ -38,6 +41,8 @@ final class FakeAudioSystem: AudioSystem {
     func isRunningSomewhere(_ id: AudioObjectID) -> Bool { running.contains(id) }
     func deviceID(forUID uid: String) -> AudioObjectID? { list.first { $0.uid == uid }?.id }
     func driverVersion() -> String? { installedDriverVersion }
+    func microphoneAllowed() -> Bool? { micAllowed }
+    func requestMicrophone(_ completion: @escaping () -> Void) { micRequests += 1; pendingMic = completion }
     func destroyAggregate(_ id: AudioObjectID) throws { remove(id) }
     func listen(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector, _ handler: @escaping () -> Void) -> ListenerToken? {
         handlers[object, default: [:]][selector] = handler

@@ -1,3 +1,4 @@
+import AVFoundation
 import CoreAudio
 import Foundation
 import os
@@ -56,6 +57,11 @@ protocol AudioSystem {
     func deviceID(forUID uid: String) -> AudioObjectID?
     /// `CFBundleShortVersionString` of the installed CallLane driver; nil when not installed.
     func driverVersion() -> String?
+    /// Microphone permission covers every input device, the hidden tap included. Without it
+    /// macOS feeds an app zeros and reports no error. nil: the user was not asked yet.
+    func microphoneAllowed() -> Bool?
+    /// Shows the system prompt once; `completion` runs on the main queue after the answer.
+    func requestMicrophone(_ completion: @escaping () -> Void)
     func destroyAggregate(_ id: AudioObjectID) throws
     /// Returns nil when CoreAudio refuses the registration.
     func listen(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector, _ handler: @escaping () -> Void) -> ListenerToken?
@@ -183,6 +189,18 @@ final class CoreAudioSystem: AudioSystem {
 
     func driverVersion() -> String? {
         NSDictionary(contentsOfFile: driverPlist)?["CFBundleShortVersionString"] as? String
+    }
+
+    func microphoneAllowed() -> Bool? {
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized: return true
+        case .notDetermined: return nil
+        default: return false
+        }
+    }
+
+    func requestMicrophone(_ completion: @escaping () -> Void) {
+        AVCaptureDevice.requestAccess(for: .audio) { _ in DispatchQueue.main.async(execute: completion) }
     }
 
     /// Not part of `AudioSystem` any more: the app stopped creating aggregates in v0.2.

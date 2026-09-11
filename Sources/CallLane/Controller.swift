@@ -11,6 +11,7 @@ final class Controller {
     /// The v0.1 aggregate device. Destroyed on sight.
     static let legacyUID = "dev.rav4nn.calllane.calls"
     private static let ownUIDs: Set<String> = [callsUID, tapUID, legacyUID]
+    static let microphoneDenied = "Microphone access denied. CallLane reads its hidden tap like a mic. Allow CallLane under System Settings → Privacy & Security → Microphone."
 
     private let audio: AudioSystem
     private let engine: EngineControl
@@ -25,6 +26,7 @@ final class Controller {
     private var lastRealOutput: AudioObjectID?
     private var tapID: AudioObjectID?
     private var driverVersion: String?
+    private var microphoneRequested = false
 
     private(set) var devices: [AudioDevice] = []
     private(set) var defaultOutputID: AudioObjectID?
@@ -77,6 +79,7 @@ final class Controller {
 
     func start() {
         reconcile()
+        requestMicrophoneIfNeeded()   // ask at launch, not in the middle of the first call
         for sel in [kAudioHardwarePropertyDevices, kAudioHardwarePropertyDefaultOutputDevice, kAudioHardwarePropertyDefaultInputDevice] {
             if let t = audio.listen(AudioObjectID(kAudioObjectSystemObject), sel, { [weak self] in self?.scheduleReconcile() }) {
                 tokens.append(t)
@@ -172,16 +175,34 @@ final class Controller {
         }
     }
 
-    /// Copies the tap onto the real output while a call app uses CallLane; stops when idle.
-    /// The engine restarts on its own when the destination changes.
+    private func requestMicrophoneIfNeeded() {
+        guard audio.microphoneAllowed() == nil, !microphoneRequested else { return }
+        microphoneRequested = true
+        audio.requestMicrophone { [weak self] in self?.reconcile() }
+    }
+
+    /// Copies the tap onto the real output while a call app uses CallLane; stops when idle,
+    /// when the route is not usable, or when microphone access is missing. The engine
+    /// restarts on its own when the destination changes.
     private func reconcileEngine() {
-        guard callsInUse, let tap = tapID, let out = defaultOutputID, out != callsDevice?.id else {
+        guard let route = engineRoute() else {
             engine.stop()
             return
         }
         let what = "Could not start the audio engine"
-        if attempt(what, { try engine.start(tap: tap, destination: out) }), status.hasPrefix(what) {
+        if attempt(what, { try engine.start(tap: route.tap, destination: route.destination) }),
+           status.hasPrefix(what) || status == Self.microphoneDenied {
             status = ""
+        }
+    }
+
+    /// The pair the engine should run on right now, or nil when it must be stopped.
+    private func engineRoute() -> (tap: AudioObjectID, destination: AudioObjectID)? {
+        guard callsInUse, let tap = tapID, let out = defaultOutputID, out != callsDevice?.id else { return nil }
+        switch audio.microphoneAllowed() {
+        case true?: return (tap, out)
+        case false?: status = Self.microphoneDenied; return nil
+        case nil: requestMicrophoneIfNeeded(); return nil
         }
     }
 

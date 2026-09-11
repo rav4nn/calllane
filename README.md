@@ -18,7 +18,9 @@ CallLane fixes both from the menu bar.
 - It locks the input to the mic you choose, so your headphones stay in the
   high-quality listening profile.
 
-A small user-space audio driver, no kernel extension, one admin password at install.
+A small user-space audio driver, no kernel extension. Two prompts, once each: the admin
+password when the driver installs, and microphone access at first launch. The app reads
+its own hidden tap device like a microphone; it never touches your real mic.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/panel-dark.png">
@@ -47,7 +49,8 @@ Or build from source with the Xcode Command Line Tools: `git clone`, then
 
 ## Use
 
-1. Launch CallLane. A phone icon appears in the menu bar.
+1. Launch CallLane. A phone icon appears in the menu bar. Allow microphone access when
+   asked: without it macOS hands the app silence and calls on `CallLane` stay mute.
 2. In each call app, pick `CallLane` as the speaker. Once per app. The setup guide in the
    menu lists the exact path for WhatsApp, FaceTime, Zoom, Meet, Slack, Teams, Discord.
 3. Keep your headphones as the system output. Keep the microphone on your Mac's

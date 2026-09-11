@@ -97,6 +97,10 @@ One class, `Engine`, that copies audio from the tap device to a destination devi
   `start` while running with a different destination stops and starts again.
 - No AVAudioEngine: on macOS it owns one I/O unit for input and output, so it cannot read
   one device and write another.
+- Microphone permission (found 2026-09-11 during acceptance): reading the tap is an input
+  stream, and macOS feeds an app zeros, with no error, until the user grants microphone
+  access. The app declares `NSMicrophoneUsageDescription`, asks at launch, and shows a
+  denial in `status`. The "no permission prompts" claim from v0.1 no longer holds.
 
 ### Controller changes (`Sources/CallLane/Controller.swift`)
 

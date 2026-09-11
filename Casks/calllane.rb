@@ -27,7 +27,8 @@ cask "calllane" do
   zap trash: "~/Library/Preferences/dev.rav4nn.calllane.plist"
 
   caveats <<~EOS
-    The CallLane driver package asks for your admin password once.
+    The CallLane driver package asks for your admin password once. On first launch
+    CallLane asks for microphone access: it reads its own hidden tap device, not your mic.
 
     CallLane is signed ad-hoc. Clear the quarantine flag before the first launch:
       xattr -dr com.apple.quarantine /Applications/CallLane.app

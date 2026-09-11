@@ -169,6 +169,46 @@ import CoreAudio
         #expect(engine.running != nil)
     }
 
+    // MARK: microphone permission (macOS feeds zeros without it)
+
+    @Test func microphoneIsRequestedOnceAtStartAndEngineWaitsForTheAnswer() {
+        fake.micAllowed = nil
+        let c = makeController()
+        c.start()
+        #expect(fake.micRequests == 1)
+        fake.running.insert(calls)
+        c.reconcile()
+        #expect(engine.running == nil, "no engine before the user answers")
+        #expect(fake.micRequests == 1, "one prompt, not one per reconcile")
+        fake.micAllowed = true
+        fake.pendingMic?()
+        #expect(engine.running != nil)
+    }
+
+    @Test func deniedMicrophoneIsVisibleAndClearsWhenGranted() {
+        fake.micAllowed = false
+        let c = makeController()
+        fake.running.insert(calls)
+        c.reconcile()
+        #expect(engine.running == nil)
+        #expect(c.status == Controller.microphoneDenied)
+        fake.micAllowed = true
+        c.reconcile()
+        #expect(engine.running != nil)
+        #expect(c.status.isEmpty)
+    }
+
+    @Test func revokedMicrophoneStopsARunningEngine() {
+        let c = makeController()
+        fake.running.insert(calls)
+        c.reconcile()
+        #expect(engine.running != nil)
+        fake.micAllowed = false
+        c.reconcile()
+        #expect(engine.running == nil)
+        #expect(c.status == Controller.microphoneDenied)
+    }
+
     // MARK: in-use listener
 
     @Test func callStartFlipsInUseWithoutPanelOpen() {
