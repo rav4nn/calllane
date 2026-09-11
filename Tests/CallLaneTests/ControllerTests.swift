@@ -30,9 +30,9 @@ import CoreAudio
 
     @Test func createsCallsAroundDefaultOutput() {
         let c = makeController()
-        #expect(c.callsDevice?.name == "Calls")
+        #expect(c.callsDevice?.name == "CallLane")
         #expect(c.callsWraps?.id == airpods)
-        #expect(!c.outputs.contains { $0.uid == Controller.callsUID }, "Calls is hidden from the output picker")
+        #expect(!c.outputs.contains { $0.uid == Controller.callsUID }, "CallLane is hidden from the output picker")
     }
 
     @Test func callsFollowsDefaultOutput() {
@@ -76,7 +76,7 @@ import CoreAudio
         let c = makeController()
         let calls = c.callsDevice!.id
         fake.remove(airpods)                 // wrapped device unplugged
-        fake.defaultOut = calls              // and Calls became the system output
+        fake.defaultOut = calls              // and CallLane became the system output
         c.reconcile()
         #expect(fake.defaultOut == speakers)
         #expect(c.status.contains("call apps only"))
@@ -112,7 +112,7 @@ import CoreAudio
         c.start()
         let calls = c.callsDevice!.id
         let fire = fake.handlers[calls]?[kAudioDevicePropertyDeviceIsRunningSomewhere]
-        #expect(fire != nil, "running listener is registered on the Calls device itself")
+        #expect(fire != nil, "running listener is registered on the CallLane device itself")
         #expect(!c.callsInUse)
         fake.running.insert(calls)
         fire?()
@@ -132,5 +132,22 @@ import CoreAudio
         let new = c.callsDevice!.id
         #expect(new != old)
         #expect(fake.handlers[new]?[kAudioDevicePropertyDeviceIsRunningSomewhere] != nil)
+    }
+
+    @Test func renamesDeviceFromOlderVersion() {
+        let old = fake.addDevice("Calls", uid: Controller.callsUID, transport: kAudioDeviceTransportTypeAggregate)
+        fake.aggregates[old] = "ap:out"
+        let c = makeController()
+        #expect(c.callsDevice?.id == old, "reuses the device by UID")
+        #expect(c.callsDevice?.name == "CallLane")
+    }
+
+    @Test func renamesOldDeviceEvenWhenItIsTheSystemOutput() {
+        let old = fake.addDevice("Calls", uid: Controller.callsUID, transport: kAudioDeviceTransportTypeAggregate)
+        fake.aggregates[old] = "ap:out"
+        fake.defaultOut = old
+        let c = makeController()
+        #expect(fake.defaultOut == airpods)
+        #expect(c.callsDevice?.name == "CallLane")
     }
 }

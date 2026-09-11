@@ -55,6 +55,7 @@ protocol AudioSystem {
     func createAggregate(name: String, uid: String, subDeviceUID: String) throws -> AudioObjectID
     func aggregateSubDeviceUID(_ id: AudioObjectID) -> String?
     func setAggregateSubDevice(_ id: AudioObjectID, uid: String) throws
+    func setName(_ id: AudioObjectID, _ name: String) throws
     func destroyAggregate(_ id: AudioObjectID) throws
     /// Returns nil when CoreAudio refuses the registration.
     func listen(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector, _ handler: @escaping () -> Void) -> ListenerToken?
@@ -189,6 +190,10 @@ final class CoreAudioSystem: AudioSystem {
         let a = address(kAudioAggregateDevicePropertyFullSubDeviceList)
         try set(id, a, [uid] as CFArray, what: "set aggregate sub-device")
         try? set(id, address(kAudioAggregateDevicePropertyMainSubDevice), uid as CFString, what: "set main sub-device")
+    }
+
+    func setName(_ id: AudioObjectID, _ name: String) throws {
+        try set(id, address(kAudioObjectPropertyName), name as CFString, what: "rename device")
     }
 
     func destroyAggregate(_ id: AudioObjectID) throws {

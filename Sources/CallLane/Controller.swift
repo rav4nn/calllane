@@ -4,7 +4,7 @@ import Observation
 
 @Observable
 final class Controller {
-    static let callsName = "Calls"
+    static let callsName = "CallLane"
     static let callsUID = "dev.rav4nn.calllane.calls"
 
     private let audio: AudioSystem
@@ -80,8 +80,8 @@ final class Controller {
         watchRunning()
     }
 
-    /// A call app opening Calls fires no system-level event, so watch the device itself.
-    /// Calls gets a new id whenever it is recreated; re-register when that happens.
+    /// A call app opening CallLane fires no system-level event, so watch the device itself.
+    /// CallLane gets a new id whenever it is recreated; re-register when that happens.
     private func watchRunning() {
         guard callsDevice?.id != runningWatched else { return }
         runningToken = nil
@@ -108,7 +108,7 @@ final class Controller {
         }
     }
 
-    /// The real output Calls should wrap, or the system should fall back to: the wrapped
+    /// The real output CallLane should wrap, or the system should fall back to: the wrapped
     /// device when it is still present, else any real output device.
     private func realOutput(for calls: AudioDevice) -> AudioDevice? {
         if let uid = audio.aggregateSubDeviceUID(calls.id), let d = devices.first(where: { $0.uid == uid && $0.hasOutput }) {
@@ -120,24 +120,27 @@ final class Controller {
     private func reconcileCalls() {
         guard let outID = defaultOutputID, let out = devices.first(where: { $0.id == outID }) else { return }
         guard let calls = callsDevice else {
-            if attempt("Could not create Calls", {
+            if attempt("Could not create CallLane", {
                 _ = try audio.createAggregate(name: Self.callsName, uid: Self.callsUID, subDeviceUID: out.uid)
             }) { status = "" }
             return
         }
+        if calls.name != Self.callsName {   // device created by an older version
+            attempt("Could not rename \(calls.name)", { try audio.setName(calls.id, Self.callsName) })
+        }
         if out.uid == Self.callsUID {
-            // Calls must never be the system output: the volume keys stop working.
+            // CallLane must never be the system output: the volume keys stop working.
             guard let real = realOutput(for: calls) else {
-                status = "Calls is the system output and no other output exists."
+                status = "CallLane is the system output and no other output exists."
                 return
             }
-            if attempt("Could not leave Calls", { try audio.setDefaultOutput(real.id) }) {
-                status = "Calls is for call apps only. Output set back to \(real.name)."
+            if attempt("Could not leave CallLane", { try audio.setDefaultOutput(real.id) }) {
+                status = "CallLane is for call apps only. Output set back to \(real.name)."
             }
             return
         }
         if audio.aggregateSubDeviceUID(calls.id) != out.uid {
-            if attempt("Could not point Calls at \(out.name)", { try audio.setAggregateSubDevice(calls.id, uid: out.uid) }) {
+            if attempt("Could not point CallLane at \(out.name)", { try audio.setAggregateSubDevice(calls.id, uid: out.uid) }) {
                 status = ""
             }
         }
@@ -177,17 +180,17 @@ final class Controller {
         outputVolume = audio.volume(id, scope: .output)
     }
 
-    /// Moves the system output off Calls first, then destroys it. Returns false and keeps
-    /// Calls when the output cannot be moved, so macOS never holds a destroyed default.
+    /// Moves the system output off CallLane first, then destroys it. Returns false and keeps
+    /// CallLane when the output cannot be moved, so macOS never holds a destroyed default.
     @discardableResult
     func removeCallsDevice() -> Bool {
         refresh()
         guard let calls = callsDevice else { return true }
         if defaultOutputID == calls.id {
             guard let real = realOutput(for: calls),
-                  attempt("Could not leave Calls", { try audio.setDefaultOutput(real.id) }) else { return false }
+                  attempt("Could not leave CallLane", { try audio.setDefaultOutput(real.id) }) else { return false }
         }
-        let ok = attempt("Could not remove Calls", { try audio.destroyAggregate(calls.id) })
+        let ok = attempt("Could not remove CallLane", { try audio.destroyAggregate(calls.id) })
         refresh()
         return ok
     }

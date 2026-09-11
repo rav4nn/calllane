@@ -65,7 +65,7 @@ struct MenuView: View {
 
             Divider()
             VStack(alignment: .leading, spacing: 6) {
-                footerButton("Remove Calls device and quit") {
+                footerButton("Remove CallLane device and quit") {
                     if controller.removeCallsDevice() { NSApp.terminate(nil) }
                 }
                 footerButton("Quit") { NSApp.terminate(nil) }
@@ -178,7 +178,7 @@ struct MenuView: View {
                 Circle()
                     .fill(controller.callsInUse ? Color.green : Color.secondary.opacity(0.4))
                     .frame(width: 7, height: 7)
-                Text("Calls → \(controller.callsWraps?.name ?? "no output")")
+                Text("CallLane → \(controller.callsWraps?.name ?? "no output")")
                     .font(.body)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -190,7 +190,7 @@ struct MenuView: View {
             if !controller.status.isEmpty {
                 note(controller.status, color: .orange)
             }
-            note("Pick “Calls” as the speaker in each call app.")
+            note("Pick “CallLane” as the speaker in each call app.")
         }
     }
 

@@ -2,19 +2,19 @@ import SwiftUI
 
 struct SetupView: View {
     private let apps: [(String, String)] = [
-        ("FaceTime", "Menu bar → Video → Output → Calls"),
-        ("Zoom", "Settings → Audio → Speaker → Calls"),
-        ("Google Meet (Chrome)", "In a call: speaker menu in the bottom bar → Calls. Or ⋮ → Settings → Audio → Speakers"),
-        ("Slack", "Preferences → Audio & video → Speaker → Calls"),
-        ("Microsoft Teams", "Settings → Devices → Speaker → Calls"),
-        ("Discord", "User Settings → Voice & Video → Output Device → Calls"),
-        ("WhatsApp", "Settings → Calls → Speaker → Calls"),
+        ("FaceTime", "Menu bar → Video → Output → CallLane"),
+        ("Zoom", "Settings → Audio → Speaker → CallLane"),
+        ("Google Meet (Chrome)", "In a call: speaker menu in the bottom bar → CallLane. Or ⋮ → Settings → Audio → Speakers"),
+        ("Slack", "Preferences → Audio & video → Speaker → CallLane"),
+        ("Microsoft Teams", "Settings → Devices → Speaker → CallLane"),
+        ("Discord", "User Settings → Voice & Video → Output Device → CallLane"),
+        ("WhatsApp", "Settings → Calls → Speaker → CallLane"),
     ]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Set “Calls” as the speaker in each call app").font(.headline)
-            Text("Do this once per app. Keep the microphone on your Mac’s built-in mic or a USB mic, not the AirPods mic. Keep your headphones as the system output; CallLane reverts it if “Calls” is picked there.")
+            Text("Set “CallLane” as the speaker in each call app").font(.headline)
+            Text("Do this once per app. Keep the microphone on your Mac’s built-in mic or a USB mic, not the AirPods mic. Keep your headphones as the system output; CallLane reverts it if “CallLane” is picked there.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -36,7 +36,7 @@ struct SetupView: View {
             }
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
 
-            Text("Safari has no per-site speaker picker, so calls in Safari cannot use Calls.")
+            Text("Safari has no per-site speaker picker, so calls in Safari cannot use CallLane.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

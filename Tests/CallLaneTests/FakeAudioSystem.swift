@@ -43,6 +43,9 @@ final class FakeAudioSystem: AudioSystem {
     }
     func aggregateSubDeviceUID(_ id: AudioObjectID) -> String? { aggregates[id] }
     func setAggregateSubDevice(_ id: AudioObjectID, uid: String) throws { aggregates[id] = uid }
+    func setName(_ id: AudioObjectID, _ name: String) throws {
+        list = list.map { $0.id == id ? AudioDevice(id: $0.id, uid: $0.uid, name: name, transport: $0.transport, hasInput: $0.hasInput, hasOutput: $0.hasOutput) : $0 }
+    }
     func destroyAggregate(_ id: AudioObjectID) throws { aggregates[id] = nil; remove(id) }
     func listen(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector, _ handler: @escaping () -> Void) -> ListenerToken? {
         handlers[object, default: [:]][selector] = handler

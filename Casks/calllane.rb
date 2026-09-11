@@ -5,7 +5,7 @@ cask "calllane" do
 
   url "https://github.com/rav4nn/calllane/releases/download/v#{version}/CallLane.zip"
   name "CallLane"
-  desc "Menu bar app that stops call audio ducking with a Calls output device"
+  desc "Menu bar app that stops call audio ducking with a CallLane output device"
   homepage "https://github.com/rav4nn/calllane"
 
   depends_on macos: :sonoma
