@@ -19,12 +19,14 @@ No drivers. No kernel extensions. No permission prompts.
 
 ```sh
 brew trust --tap rav4nn/tap
-brew install --cask --no-quarantine rav4nn/tap/calllane
+brew install --cask rav4nn/tap/calllane
+xattr -dr com.apple.quarantine /Applications/CallLane.app
 ```
 
 `brew trust` is needed on Homebrew 6, which loads third-party casks only from
-taps you trust. `--no-quarantine` is needed because CallLane is signed ad-hoc, not with an Apple
-Developer ID. Without it, macOS shows "cannot verify" and you must allow it under
+taps you trust. The `xattr` line is needed because CallLane is signed ad-hoc, not
+with an Apple Developer ID, and Homebrew 6 always quarantines downloads. Without
+it, macOS shows "cannot verify" and you must allow the app under
 System Settings → Privacy & Security.
 
 Or build from source with the Xcode Command Line Tools: `git clone`, then `make run`.

@@ -15,7 +15,8 @@ cask "calllane" do
   zap trash: "~/Library/Preferences/dev.rav4nn.calllane.plist"
 
   caveats <<~EOS
-    CallLane is signed ad-hoc. Install with --no-quarantine, or allow it under
-    System Settings → Privacy & Security after the first launch.
+    CallLane is signed ad-hoc. Clear the quarantine flag before the first launch:
+      xattr -dr com.apple.quarantine /Applications/CallLane.app
+    or allow the app under System Settings → Privacy & Security after it is blocked.
   EOS
 end
