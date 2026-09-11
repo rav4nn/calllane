@@ -13,6 +13,36 @@ struct CallLaneApp: App {
     init() {
         controller = Controller(audio: CoreAudioSystem())
         controller.start()
+        // `scripts/snap.sh` screenshots this window: the menu bar popover cannot be captured.
+        if CommandLine.arguments.contains("--preview") { showPreviewWindow() }
+    }
+
+    private func showPreviewWindow() {
+        let controller = self.controller
+        let loginItem = self.loginItem
+        DispatchQueue.main.async {
+            let host = NSHostingView(rootView: MenuView(controller: controller, loginItem: loginItem))
+            host.frame.size = host.fittingSize
+            let window = NSWindow(contentRect: host.frame,
+                                  styleMask: [.titled, .closable],
+                                  backing: .buffered,
+                                  defer: false)
+            window.title = "CallLane Panel Preview"
+            window.contentView = host
+            window.isReleasedWhenClosed = false
+            window.center()
+            PreviewWindow.shared = window
+            // Writing AppleInterfaceStyle does not reach an already-running session, so the
+            // screenshot script asks for the appearance it wants directly.
+            if CommandLine.arguments.contains("--dark") {
+                NSApp.appearance = NSAppearance(named: .darkAqua)
+            } else if CommandLine.arguments.contains("--light") {
+                NSApp.appearance = NSAppearance(named: .aqua)
+            }
+            NSApp.setActivationPolicy(.regular)
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKeyAndOrderFront(nil)
+        }
     }
 
     var body: some Scene {
@@ -28,6 +58,12 @@ struct CallLaneApp: App {
         }
         .windowResizability(.contentSize)
     }
+}
+
+/// Keeps the `--preview` window alive for the life of the process.
+@MainActor
+enum PreviewWindow {
+    static var shared: NSWindow?
 }
 
 @Observable

@@ -3,7 +3,7 @@ BUILD   = build
 BUNDLE  = $(BUILD)/$(APP).app
 BIN     = .build/release/$(APP)
 
-.PHONY: build run test release clean
+.PHONY: build run test release snap clean
 
 build:
 	swift build -c release
@@ -25,3 +25,6 @@ release: build
 
 clean:
 	rm -rf .build $(BUILD)
+
+snap:
+	scripts/snap.sh
