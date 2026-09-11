@@ -1,0 +1,178 @@
+import CoreAudio
+import Foundation
+import Observation
+
+@Observable
+final class Controller {
+    static let callsName = "Calls"
+    static let callsUID = "dev.rav4nn.calllane.calls"
+
+    private let audio: AudioSystem
+    private let defaults: UserDefaults
+    private var tokens: [ListenerToken] = []
+    private var pending: DispatchWorkItem?
+
+    private(set) var devices: [AudioDevice] = []
+    private(set) var defaultOutputID: AudioObjectID?
+    private(set) var defaultInputID: AudioObjectID?
+    private(set) var outputVolume: Float?
+    private(set) var callsInUse = false
+    private(set) var status = ""
+
+    init(audio: AudioSystem, defaults: UserDefaults = .standard) {
+        self.audio = audio
+        self.defaults = defaults
+    }
+
+    // MARK: derived
+
+    var outputs: [AudioDevice] { devices.filter { $0.hasOutput && $0.uid != Self.callsUID } }
+    var inputs: [AudioDevice] { devices.filter { $0.hasInput } }
+    var callsDevice: AudioDevice? { devices.first { $0.uid == Self.callsUID } }
+    var callsWraps: AudioDevice? {
+        guard let calls = callsDevice, let uid = audio.aggregateSubDeviceUID(calls.id) else { return nil }
+        return devices.first { $0.uid == uid }
+    }
+
+    var inputLocked: Bool {
+        get { defaults.string(forKey: "lockedInputUID") != nil }
+        set {
+            if newValue, let id = audio.defaultInput(), let dev = devices.first(where: { $0.id == id }) {
+                defaults.set(dev.uid, forKey: "lockedInputUID")
+                defaults.set(audio.volume(id, scope: .input) ?? 1, forKey: "lockedInputVolume")
+            } else {
+                defaults.removeObject(forKey: "lockedInputUID")
+            }
+            reconcile()
+        }
+    }
+
+    // MARK: lifecycle
+
+    func start() {
+        reconcile()
+        for sel in [kAudioHardwarePropertyDevices, kAudioHardwarePropertyDefaultOutputDevice, kAudioHardwarePropertyDefaultInputDevice] {
+            tokens.append(audio.listen(sel) { [weak self] in self?.scheduleReconcile() })
+        }
+    }
+
+    // Bluetooth connects fire a burst of events; run once after the burst.
+    private func scheduleReconcile() {
+        pending?.cancel()
+        let item = DispatchWorkItem { [weak self] in self?.reconcile() }
+        pending = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: item)
+    }
+
+    // MARK: rules — idempotent, safe to call at any time
+
+    func reconcile() {
+        refresh()
+        reconcileCalls()
+        reconcileInputLock()
+        refresh()
+        outputVolume = defaultOutputID.flatMap { audio.volume($0, scope: .output) }
+        callsInUse = callsDevice.map { audio.isRunningSomewhere($0.id) } ?? false
+    }
+
+    private func refresh() {
+        devices = audio.devices()
+        defaultOutputID = audio.defaultOutput()
+        defaultInputID = audio.defaultInput()
+    }
+
+    /// Runs one CoreAudio write that enforces an app invariant. A failure is never silent:
+    /// it lands in `status` for the menu and in the log.
+    @discardableResult
+    private func attempt(_ what: String, _ op: () throws -> Void) -> Bool {
+        do { try op(); return true } catch {
+            status = "\(what): \(error)"
+            log.error("\(what): \(String(describing: error))")
+            return false
+        }
+    }
+
+    /// The real output Calls should wrap, or the system should fall back to: the wrapped
+    /// device when it is still present, else any real output device.
+    private func realOutput(for calls: AudioDevice) -> AudioDevice? {
+        if let uid = audio.aggregateSubDeviceUID(calls.id), let d = devices.first(where: { $0.uid == uid && $0.hasOutput }) {
+            return d
+        }
+        return outputs.first
+    }
+
+    private func reconcileCalls() {
+        guard let outID = defaultOutputID, let out = devices.first(where: { $0.id == outID }) else { return }
+        guard let calls = callsDevice else {
+            if attempt("Could not create Calls", {
+                _ = try audio.createAggregate(name: Self.callsName, uid: Self.callsUID, subDeviceUID: out.uid)
+            }) { status = "" }
+            return
+        }
+        if out.uid == Self.callsUID {
+            // Calls must never be the system output: the volume keys stop working.
+            guard let real = realOutput(for: calls) else {
+                status = "Calls is the system output and no other output exists."
+                return
+            }
+            if attempt("Could not leave Calls", { try audio.setDefaultOutput(real.id) }) {
+                status = "Calls is for call apps only. Output set back to \(real.name)."
+            }
+            return
+        }
+        if audio.aggregateSubDeviceUID(calls.id) != out.uid {
+            if attempt("Could not point Calls at \(out.name)", { try audio.setAggregateSubDevice(calls.id, uid: out.uid) }) {
+                status = ""
+            }
+        }
+    }
+
+    private func reconcileInputLock() {
+        guard let uid = defaults.string(forKey: "lockedInputUID"),
+              let locked = devices.first(where: { $0.uid == uid && $0.hasInput }) else { return }
+        if defaultInputID != locked.id {
+            attempt("Could not lock input to \(locked.name)", { try audio.setDefaultInput(locked.id) })
+        }
+        let level = defaults.object(forKey: "lockedInputVolume") as? Float ?? 1
+        if let current = audio.volume(locked.id, scope: .input), abs(current - level) > 0.01 {
+            attempt("Could not restore input volume", { try audio.setVolume(locked.id, scope: .input, level) })
+        }
+    }
+
+    // MARK: user actions
+
+    func selectOutput(_ id: AudioObjectID) {
+        try? audio.setDefaultOutput(id)
+        reconcile()
+    }
+
+    func selectInput(_ id: AudioObjectID) {
+        try? audio.setDefaultInput(id)
+        if inputLocked, let dev = devices.first(where: { $0.id == id }) {
+            defaults.set(dev.uid, forKey: "lockedInputUID")
+            defaults.set(audio.volume(id, scope: .input) ?? 1, forKey: "lockedInputVolume")
+        }
+        reconcile()
+    }
+
+    func setOutputVolume(_ value: Float) {
+        guard let id = defaultOutputID else { return }
+        try? audio.setVolume(id, scope: .output, value)
+        outputVolume = audio.volume(id, scope: .output)
+    }
+
+    /// Moves the system output off Calls first, then destroys it. Returns false and keeps
+    /// Calls when the output cannot be moved, so macOS never holds a destroyed default.
+    @discardableResult
+    func removeCallsDevice() -> Bool {
+        refresh()
+        guard let calls = callsDevice else { return true }
+        if defaultOutputID == calls.id {
+            guard let real = realOutput(for: calls),
+                  attempt("Could not leave Calls", { try audio.setDefaultOutput(real.id) }) else { return false }
+        }
+        let ok = attempt("Could not remove Calls", { try audio.destroyAggregate(calls.id) })
+        refresh()
+        return ok
+    }
+}
