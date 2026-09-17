@@ -1,0 +1,171 @@
+:root {
+  --bg: #f6f5f1;
+  --card: #ffffff;
+  --ink: #1d1d1f;
+  --muted: #6b6b70;
+  --line: #dcdbd5;
+  --music: #d9930f;
+  --call: #2f9e6b;
+  --track: #ecebe6;
+  --code: #1d1d1f;
+  --code-ink: #f6f5f1;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141416;
+    --card: #1d1d20;
+    --ink: #f2f2f0;
+    --muted: #9a9aa0;
+    --line: #2d2d31;
+    --music: #f0b436;
+    --call: #4cc48b;
+    --track: #2a2a2e;
+    --code: #0c0c0d;
+    --code-ink: #e9e9e6;
+  }
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 17px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; }
+a:focus-visible, .button:focus-visible { outline: 2px solid var(--call); outline-offset: 3px; }
+
+h1, h2, h3 {
+  font-family: var(--font-display), -apple-system, sans-serif;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+h1 { font-size: clamp(2.2rem, 5.2vw, 3.6rem); font-weight: 700; line-height: 1.05; text-wrap: balance; }
+h2 { font-size: clamp(1.6rem, 3vw, 2.2rem); font-weight: 600; line-height: 1.15; margin-bottom: 1rem; }
+h3 { font-size: 1.35rem; font-weight: 600; margin-bottom: 0.35rem; }
+p { margin: 0 0 1rem; max-width: 62ch; }
+
+.top, main, footer {
+  width: min(1080px, 100% - 2.5rem);
+  margin-inline: auto;
+}
+.top {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 1.25rem 0;
+  font-weight: 500;
+}
+.brand { display: inline-flex; align-items: center; gap: .45rem; text-decoration: none; font-family: var(--font-display); font-weight: 600; font-size: 1.1rem; }
+.top > a:last-child { text-decoration: none; color: var(--muted); }
+.top > a:last-child:hover { color: var(--ink); }
+
+main > section { padding-block: 4rem; border-top: 1px solid var(--line); }
+main > section.hero { border-top: 0; padding-block: 3rem 5rem; }
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: 3rem;
+  align-items: center;
+}
+.lede { font-size: 1.2rem; margin-top: 1.25rem; color: var(--muted); max-width: 46ch; }
+.actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1.5rem; }
+.button {
+  display: inline-block; padding: .75rem 1.2rem; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--card); text-decoration: none; font-weight: 500;
+}
+.button.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.fine { font-size: .9rem; color: var(--muted); margin-top: 1rem; }
+
+/* Demo meters: an 8 second loop. The call joins at 30 percent. */
+.demo { display: grid; gap: 1rem; }
+.panel-card {
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+  padding: 1rem 1.1rem; display: grid; gap: .7rem;
+}
+.panel-head { display: flex; justify-content: space-between; align-items: center; font-weight: 600; }
+.pill {
+  font-size: .78rem; font-weight: 500; padding: .15rem .55rem; border-radius: 999px;
+  background: color-mix(in srgb, var(--call) 18%, transparent); color: var(--call);
+  animation: pill 8s linear infinite;
+}
+.row { display: grid; grid-template-columns: 4.5rem 1fr 3.4rem; align-items: center; gap: .75rem; font-size: .92rem; }
+.label { color: var(--muted); }
+.track { height: 10px; border-radius: 999px; background: var(--track); overflow: hidden; }
+.fill { display: block; height: 100%; border-radius: inherit; width: 100%; }
+.fill.music { background: var(--music); }
+.fill.call { background: var(--call); width: 0; animation: call 8s linear infinite; }
+.ducked .fill.music { animation: duck 8s linear infinite; }
+.db { color: var(--music); font-size: .8rem; font-variant-numeric: tabular-nums; opacity: 0; text-align: right; }
+.ducked .db { animation: pill 8s linear infinite; }
+.lane .db { visibility: hidden; }
+.profile .label { align-self: baseline; }
+.swap { position: relative; display: block; height: 1.4em; grid-column: 2 / 4; }
+.swap > span { position: absolute; inset: 0; }
+.swap .after { opacity: 0; animation: pill 8s linear infinite; }
+.swap .before { animation: pill-inverse 8s linear infinite; }
+.ducked .swap .after { color: var(--music); }
+.lane .swap .after { color: var(--call); }
+
+@keyframes duck {
+  0%, 30% { width: 100%; }
+  33%, 92% { width: 32%; }
+  95%, 100% { width: 100%; }
+}
+@keyframes call {
+  0%, 30% { width: 0; }
+  33%, 92% { width: 78%; }
+  95%, 100% { width: 0; }
+}
+@keyframes pill {
+  0%, 30% { opacity: 0; }
+  33%, 92% { opacity: 1; }
+  95%, 100% { opacity: 0; }
+}
+@keyframes pill-inverse {
+  0%, 30% { opacity: 1; }
+  33%, 92% { opacity: 0; }
+  95%, 100% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pill, .fill.call, .ducked .fill.music, .ducked .db, .swap > span { animation: none; }
+  .pill, .ducked .db, .swap .after { opacity: 1; }
+  .swap .before { opacity: 0; }
+  .fill.call { width: 78%; }
+  .ducked .fill.music { width: 32%; }
+}
+
+.fixes .fix + .fix { margin-top: 2rem; }
+.fixes h2 { margin-bottom: 1.75rem; }
+
+.setup { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 3rem; align-items: start; }
+.setup ol { padding-left: 1.4rem; margin: 0; max-width: 62ch; }
+.setup li { margin-bottom: 1.4rem; }
+.setup li::marker { font-family: var(--font-display); font-weight: 600; color: var(--muted); }
+.note { display: block; font-size: .9rem; color: var(--muted); margin-top: .5rem; }
+pre {
+  margin: .75rem 0 0; padding: .9rem 1rem; border-radius: 10px;
+  background: var(--code); color: var(--code-ink); overflow-x: auto;
+  font: .86rem/1.6 ui-monospace, "SF Mono", Menlo, monospace;
+}
+.panel { margin: 0; text-align: center; }
+.panel img { max-width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--line); }
+.panel figcaption { font-size: .9rem; color: var(--muted); margin-top: .75rem; }
+
+.limits ul { padding-left: 1.2rem; margin: 0; max-width: 62ch; }
+.limits li { margin-bottom: .6rem; }
+
+footer {
+  display: flex; flex-wrap: wrap; gap: 1.25rem; padding: 2rem 0 3rem;
+  border-top: 1px solid var(--line); font-size: .9rem; color: var(--muted);
+}
+footer a { text-decoration: none; }
+footer a:hover { color: var(--ink); text-decoration: underline; }
+
+@media (max-width: 760px) {
+  .hero, .setup { grid-template-columns: minmax(0, 1fr); gap: 2rem; }
+  main > section { padding-block: 2.75rem; }
+  .row { grid-template-columns: 3.8rem 1fr 3.4rem; }
+}
