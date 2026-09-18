@@ -1,5 +1,5 @@
 // LaneMeter: a floating on-screen meter for demo recordings.
-// Rows: music level (Spotify), call level (loudest running call app), headphones sample rate.
+// Rows: media level (everything but call apps), call level (call apps and their helpers), headphones sample rate.
 // Levels come from CoreAudio process taps (macOS 14.2+). The window stays above every app.
 import AppKit
 import CoreAudio
@@ -19,12 +19,6 @@ func str(_ obj: AudioObjectID, _ sel: AudioObjectPropertySelector) -> String {
     AudioObjectGetPropertyData(obj, &a, 0, nil, &size, &s); return s as String
 }
 func defaultOutput() -> AudioObjectID { get(AudioObjectID(kAudioObjectSystemObject), kAudioHardwarePropertyDefaultOutputDevice, AudioObjectID(0)) }
-func processObject(pid: pid_t) -> AudioObjectID {
-    var a = addr(kAudioHardwarePropertyTranslatePIDToProcessObject); var p = pid; var out = AudioObjectID(0)
-    var size = UInt32(MemoryLayout<AudioObjectID>.size)
-    AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &a, UInt32(MemoryLayout<pid_t>.size), &p, &size, &out)
-    return out
-}
 
 /// The IOProc writes here; the model reads here. Owned by both, so a tap can die mid-callback.
 /// ponytail: a plain Float; aligned 4-byte stores are atomic on arm64, and a torn meter frame is harmless.
@@ -36,11 +30,8 @@ final class Tap {
     let level = Level()
     var rms: Float { level.rms }
     private var tap = AudioObjectID(0), agg = AudioObjectID(0), proc: AudioDeviceIOProcID?
-    let pid: pid_t
 
-    init(pid: pid_t, name: String) throws {
-        self.pid = pid
-        let desc = CATapDescription(stereoMixdownOfProcesses: [processObject(pid: pid)])
+    init(_ desc: CATapDescription, name: String) throws {
         desc.uuid = UUID(); desc.muteBehavior = .unmuted; desc.name = "LaneMeter \(name)"; desc.isPrivate = true
         var err = AudioHardwareCreateProcessTap(desc, &tap)
         guard err == noErr else { throw NSError(domain: "tap", code: Int(err)) }
@@ -78,21 +69,28 @@ final class Tap {
 
 // MARK: Model
 
-let musicApps = ["com.spotify.client": "Spotify", "com.apple.Music": "Music", "com.apple.Safari": "Safari", "tv.plex.desktop": "Plex"]
-let callApps = ["com.google.Chrome": "Meet", "net.whatsapp.WhatsApp": "WhatsApp", "com.apple.FaceTime": "FaceTime",
-                "us.zoom.xos": "Zoom", "com.tinyspeck.slackmacgap": "Slack", "com.microsoft.teams2": "Teams", "com.hnc.Discord": "Discord"]
+/// Bundle id prefixes of call apps. Every CoreAudio process whose bundle id starts with one of
+/// these counts as "call" (helpers included); everything else that makes sound is "media".
+let callPrefixes = ["com.google.Chrome", "net.whatsapp.WhatsApp", "com.apple.FaceTime", "com.apple.avconferenced",
+                    "us.zoom", "com.tinyspeck.slackmacgap", "com.microsoft.teams", "com.hnc.Discord"]
 
-let allApps = musicApps.merging(callApps, uniquingKeysWith: { $1 })
+/// All CoreAudio process objects with their bundle ids, or nil when the HAL refuses the list.
+func processObjects() -> [(AudioObjectID, String)]? {
+    var a = addr(kAudioHardwarePropertyProcessObjectList); var size = UInt32(0)
+    guard AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject), &a, 0, nil, &size) == noErr else { return nil }
+    var ids = [AudioObjectID](repeating: 0, count: Int(size) / MemoryLayout<AudioObjectID>.size)
+    guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &a, 0, nil, &size, &ids) == noErr else { return nil }
+    return ids.map { ($0, str($0, kAudioProcessPropertyBundleID)) }
+}
 
 final class Model: ObservableObject {
-    @Published var music: Float = -60
-    @Published var musicName = "Music"
+    @Published var media: Float = -60
     @Published var call: Float = -60
-    @Published var callName = "Call"
     @Published var device = ""
     @Published var rate = 0.0
     @Published var error = ""
-    private var taps: [String: Tap] = [:]   // bundle id → tap
+    private var mediaTap: Tap?, callTap: Tap?
+    private var callObjects: Set<AudioObjectID> = []
     private var tick = 0
 
     init() {
@@ -105,28 +103,26 @@ final class Model: ObservableObject {
         let out = defaultOutput()
         device = str(out, kAudioObjectPropertyName)
         rate = get(out, kAudioDevicePropertyNominalSampleRate, Double(0))
-        let (m, mn) = loudest(musicApps); music = smooth(music, m); musicName = mn ?? "Music"
-        let (c, cn) = loudest(callApps); call = smooth(call, c); callName = cn ?? "Call"
+        media = smooth(media, db(mediaTap)); call = smooth(call, db(callTap))
     }
+    private func db(_ tap: Tap?) -> Float { max(-60, 20 * log10(max(tap?.rms ?? 0, 1e-5))) }
     private func smooth(_ old: Float, _ new: Float) -> Float { new > old ? new : old * 0.85 + new * 0.15 }
-    private func loudest(_ apps: [String: String]) -> (Float, String?) {
-        var best: Float = -60; var name: String?
-        for (bundle, label) in apps {
-            guard let t = taps[bundle] else { continue }
-            let db = max(-60, 20 * log10(max(t.rms, 1e-5)))
-            if db > best || name == nil { best = db; name = label }
-        }
-        return (best, name)
-    }
-    /// Tap every running music or call app; drop taps whose app quit. Runs once a second.
+
+    /// Rebuild both taps when the set of call processes changes. Runs once a second.
+    /// Both taps are built first and the state commits together, so a failure keeps the last good pair.
     private func refreshTaps() {
-        let running = Dictionary(NSWorkspace.shared.runningApplications
-            .compactMap { app in app.bundleIdentifier.map { ($0, app.processIdentifier) } }, uniquingKeysWith: { first, _ in first })
-        for (bundle, tap) in taps where running[bundle] != tap.pid { taps[bundle] = nil }
-        for (bundle, label) in allApps {
-            guard taps[bundle] == nil, let pid = running[bundle] else { continue }
-            do { taps[bundle] = try Tap(pid: pid, name: label) } catch { self.error = "\(label): \(error.localizedDescription)" }
-        }
+        guard let procs = processObjects() else { return }
+        let me = ProcessInfo.processInfo.processIdentifier
+        let calls = Set(procs.filter { obj, bundle in
+            callPrefixes.contains { bundle.hasPrefix($0) } && get(obj, kAudioProcessPropertyPID, pid_t(0)) != me
+        }.map { $0.0 })
+        guard calls != callObjects || mediaTap == nil else { return }
+        let objs = Array(calls)
+        do {
+            let media = try Tap(CATapDescription(stereoGlobalTapButExcludeProcesses: objs), name: "media")
+            let call = objs.isEmpty ? nil : try Tap(CATapDescription(stereoMixdownOfProcesses: objs), name: "call")
+            (mediaTap, callTap, callObjects, error) = (media, call, calls, "")
+        } catch { self.error = "tap: \(error.localizedDescription)" }
     }
 }
 
@@ -159,7 +155,7 @@ struct MeterView: View {
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Bar(title: "Music", db: model.music, color: .yellow)
+            Bar(title: "Media", db: model.media, color: .yellow)
             Bar(title: "Call", db: model.call, color: .green)
             HStack(spacing: 14) {
                 Text("Headphones").font(.system(size: 22, weight: .semibold)).frame(width: 150, alignment: .leading)
