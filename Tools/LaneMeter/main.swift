@@ -70,8 +70,8 @@ final class Tap {
 
 /// Bundle id prefixes of call apps. Every CoreAudio process whose bundle id starts with one of
 /// these counts as "call" (helpers included); everything else that makes sound is "media".
-let callPrefixes = ["com.google.Chrome", "net.whatsapp.WhatsApp", "com.apple.FaceTime", "com.apple.avconferenced",
-                    "us.zoom", "com.tinyspeck.slackmacgap", "com.microsoft.teams", "com.hnc.Discord"]
+/// Chrome is media on purpose: Meet does not duck, and YouTube in Chrome must read as media.
+let callPrefixes = ["net.whatsapp.WhatsApp", "com.apple.FaceTime", "com.apple.avconferenced"]
 
 /// Names of visible microphones some process has running right now. CoreAudio does not say
 /// which process; kAudioProcessPropertyDevices came back empty on macOS 26.
