@@ -143,7 +143,7 @@ struct Bar: View {
                     Capsule().fill(color).frame(width: max(0, g.size.width * CGFloat((db + 60) / 60)))
                 }
             }.frame(height: 18)
-            Text(String(format: "%3.0f dB", db)).font(.system(size: 22, weight: .medium, design: .monospaced)).frame(width: 90, alignment: .trailing)
+            Text(String(format: "%3.0f%%", max(0, (db + 60) / 60 * 100))).font(.system(size: 22, weight: .medium, design: .monospaced)).frame(width: 80, alignment: .trailing)
         }
     }
 }
@@ -152,21 +152,21 @@ struct MeterView: View {
     @ObservedObject var model: Model
     var quality: (String, Color) {
         switch model.rate {
-        case 44100...: return ("Listening, \(Int(model.rate / 1000)) kHz", .green)
-        case 1...: return ("Headset, \(Int(model.rate / 1000)) kHz", .orange)
+        case 44100...: return ("High quality (\(Int(model.rate / 1000)) kHz)", .green)
+        case 1...: return ("Low quality (\(Int(model.rate / 1000)) kHz)", .orange)
         default: return ("No output device", .gray)
         }
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Bar(title: model.musicName, db: model.music, color: .yellow)
-            Bar(title: model.callName, db: model.call, color: .green)
+            Bar(title: "Music", db: model.music, color: .yellow)
+            Bar(title: "Call", db: model.call, color: .green)
             HStack(spacing: 14) {
                 Text("Headphones").font(.system(size: 22, weight: .semibold)).frame(width: 150, alignment: .leading)
                 Text(quality.0).font(.system(size: 22, weight: .medium)).foregroundStyle(quality.1)
-                Spacer()
-                Text(model.device).font(.system(size: 14)).foregroundStyle(.secondary).lineLimit(1)
             }
+            Text("\(model.device)  ·  music from \(model.musicName), call from \(model.callName)")
+                .font(.system(size: 14)).foregroundStyle(.secondary).lineLimit(1)
             if !model.error.isEmpty { Text(model.error).font(.system(size: 13)).foregroundStyle(.red) }
         }
         .padding(22)
