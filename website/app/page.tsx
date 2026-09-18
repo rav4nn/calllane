@@ -114,6 +114,7 @@ xattr -dr com.apple.quarantine /Applications/CallLane.app`}</code></pre>
             <li>Calls in Safari can&rsquo;t use CallLane. Safari has no per-site speaker picker.</li>
             <li>It adds about 10 to 15 ms of latency to call audio.</li>
             <li>Pick CallLane before the call starts. Once a call begins on your headphones, they hold the headset profile until you hang up.</li>
+            <li>Meet in Chrome does not duck your music on its own: Chrome does its own echo cancelling. CallLane still stops the headset-quality drop there, so keep it for the mic fix.</li>
             <li>Spatial Audio and head tracking may not apply to the call.</li>
             <li>Requires macOS 14 or later. Tested on macOS 26 with AirPods Pro 3.</li>
             <li>Signed ad-hoc, so macOS asks you to allow it once. The install steps above cover it.</li>

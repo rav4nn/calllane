@@ -77,6 +77,8 @@ and the call plays through those headphones, so the call follows.
 - Volume keys do nothing while `CallLane` is the system output. CallLane reverts that
   selection and tells you.
 - Safari has no per-site speaker picker, so calls in Safari cannot use `CallLane`.
+- Google Meet in Chrome does not duck other audio by itself (Chrome runs its own echo
+  cancelling). For Meet, CallLane only stops the headset-quality drop.
 - `CallLane` runs at 48 kHz. Every call app handles that.
 - Spatial Audio and head tracking may not apply to the call on `CallLane`.
 - Tested on macOS 26 with AirPods Pro 3. Runs on macOS 14 and later.
