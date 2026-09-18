@@ -1,5 +1,27 @@
 # CallLane
 
+**Your music shouldn't go quiet when you join a call.**
+
+A free, open-source menu-bar app for macOS. It stops the system from muting everything
+else during calls, and keeps your AirPods at full quality by using your Mac's mic instead.
+
+macOS 14 or later · No account · No kernel extension
+
+[**Website**](https://calllane.hardeep.cv)
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/panel-dark.png">
+  <img src="docs/panel-light.png" alt="CallLane panel showing media volume, call volume, headphone quality, and mic level" width="340">
+</picture>
+
+https://github.com/rav4nn/calllane/raw/main/website/public/demo-web.mp4
+
+> **Before:** Music at 48 %, headphones at 48 kHz. A WhatsApp call starts — media drops
+> to 2 %, quality drops to 24 kHz. **After:** CallLane keeps media at full volume and
+> headphones at high quality throughout the call.
+
+## The problem
+
 Two things go wrong every time you join a call on a Mac with Bluetooth headphones.
 
 1. **Your media gets quiet.** macOS lowers every other sound by about 20 dB the moment
@@ -10,7 +32,7 @@ Two things go wrong every time you join a call on a Mac with Bluetooth headphone
    time, so the headphones fall back to the low-quality headset profile. The MacBook's
    built-in mic sounds better anyway.
 
-CallLane fixes both from the menu bar.
+## How CallLane fixes it
 
 - It gives call apps their own output device, `CallLane`. The app copies whatever plays
   on it onto your real headphones. macOS ducks only the audio on the call app's device,
@@ -21,11 +43,6 @@ CallLane fixes both from the menu bar.
 A small user-space audio driver, no kernel extension. Two prompts, once each: the admin
 password when the driver installs, and microphone access at first launch. The app reads
 its own hidden tap device like a microphone; it never touches your real mic.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/panel-dark.png">
-  <img src="docs/panel-light.png" alt="CallLane panel: output and input pickers, volume slider, CallLane status row" width="340">
-</picture>
 
 ## Install
 
