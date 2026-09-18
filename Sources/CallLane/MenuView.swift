@@ -68,7 +68,7 @@ struct MenuView: View {
                 .keyboardShortcut("q")
         }
         .padding(16)
-        .frame(width: 300)
+        .frame(width: 340)
         .onAppear { controller.reconcile() }
     }
 
@@ -180,18 +180,23 @@ struct MenuView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             } else {
-                HStack(spacing: 8) {
+                HStack(alignment: .top, spacing: 8) {
                     Circle()
                         .fill(controller.callsInUse ? Color.green : Color.secondary.opacity(0.4))
                         .frame(width: 7, height: 7)
-                    Text("CallLane → \(controller.defaultOutputDevice?.name ?? "no output")")
-                        .font(.body)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+                        .padding(.top, 6)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("CallLane")
+                            .font(.body)
+                        Text("→ \(controller.defaultOutputDevice?.name ?? "no output")")
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                    }
                     Spacer(minLength: 8)
                     Text(controller.callsInUse ? "in use" : "idle")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .padding(.top, 2)
                 }
             }
             if !controller.status.isEmpty {
