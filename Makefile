@@ -86,3 +86,12 @@ clean:
 
 snap:
 	scripts/snap.sh
+
+# LaneMeter: floating on-screen meter for demo recordings (Tools/LaneMeter). Not shipped.
+METER = $(BUILD)/LaneMeter.app
+meter:
+	rm -rf $(METER)
+	mkdir -p $(METER)/Contents/MacOS
+	swiftc -O -framework AppKit -framework CoreAudio -framework SwiftUI Tools/LaneMeter/main.swift -o $(METER)/Contents/MacOS/LaneMeter
+	cp Tools/LaneMeter/Info.plist $(METER)/Contents/Info.plist
+	codesign --force --sign - $(METER)
