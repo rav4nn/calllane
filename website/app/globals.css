@@ -220,6 +220,11 @@ p { max-width: 62ch; }
   font-size: .78rem; font-style: normal; color: var(--muted);
 }
 .cite-icon { flex-shrink: 0; }
+.voice cite a {
+  display: flex; align-items: center; gap: .4rem;
+  color: var(--muted); text-decoration: none;
+}
+.voice cite a:hover { color: var(--ink); }
 
 /* ---------- Feature cards ---------- */
 .feature-grid {

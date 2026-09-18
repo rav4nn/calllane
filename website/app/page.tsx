@@ -58,15 +58,15 @@ export default function Page() {
           <div className="voice-grid">
             <blockquote className="voice">
               <p>&ldquo;On full volume I can hardly hear anything.&rdquo;</p>
-              <cite><AppleIcon /> Apple Community</cite>
+              <cite><a href="https://discussions.apple.com/thread/251775481" target="_blank" rel="noopener noreferrer"><AppleIcon /> Apple Community</a></cite>
             </blockquote>
             <blockquote className="voice">
               <p>&ldquo;Music from Spotify sounded like it was being transmitted over AM frequency.&rdquo;</p>
-              <cite><GlobeIcon /> edwinb.co.uk</cite>
+              <cite><a href="https://edwinb.co.uk" target="_blank" rel="noopener noreferrer"><GlobeIcon /> edwinb.co.uk</a></cite>
             </blockquote>
             <blockquote className="voice">
               <p>&ldquo;Audio ducking doesn&rsquo;t deactivate after the call. The only fix is restarting my Mac.&rdquo;</p>
-              <cite><AppleIcon /> Apple Community</cite>
+              <cite><a href="https://discussions.apple.com/thread/253206466" target="_blank" rel="noopener noreferrer"><AppleIcon /> Apple Community</a></cite>
             </blockquote>
             <blockquote className="voice">
               <p>&ldquo;Your voice goes from studio-quality 48&thinsp;kHz to walkie-talkie 16&thinsp;kHz mono.&rdquo;</p>
@@ -74,11 +74,11 @@ export default function Page() {
             </blockquote>
             <blockquote className="voice">
               <p>&ldquo;It has been a decade that people are facing this issue.&rdquo;</p>
-              <cite><AppleIcon /> Apple Community</cite>
+              <cite><a href="https://discussions.apple.com/thread/252978122" target="_blank" rel="noopener noreferrer"><AppleIcon /> Apple Community</a></cite>
             </blockquote>
             <blockquote className="voice">
               <p>&ldquo;The &lsquo;fix&rsquo; of switching to the internal mic is not really a fix. It&rsquo;s a workaround.&rdquo;</p>
-              <cite><StackIcon /> StackExchange</cite>
+              <cite><a href="https://apple.stackexchange.com/questions/375995" target="_blank" rel="noopener noreferrer"><StackIcon /> StackExchange</a></cite>
             </blockquote>
           </div>
         </section>
