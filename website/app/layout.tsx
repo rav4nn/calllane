@@ -19,20 +19,49 @@ export const metadata: Metadata = {
   title: "CallLane: keep your music loud during Mac calls",
   description:
     "A free, open-source menu-bar app that stops macOS from quieting everything else during calls, and keeps your AirPods at full quality.",
+  alternates: { canonical: "https://calllane.hardeep.cv/" },
   openGraph: {
     title: "CallLane: keep your music loud during Mac calls",
     description:
       "Free, open-source menu-bar app. Music stays at full volume during FaceTime, WhatsApp, Zoom, Meet, Slack, Teams and Discord. AirPods keep their listening quality.",
     url: "https://calllane.hardeep.cv",
     siteName: "CallLane",
+    type: "website",
     images: [{ url: "/panel-light.png", width: 680, height: 680 }],
   },
+  twitter: {
+    card: "summary_large_image",
+    title: "CallLane: keep your music loud during Mac calls",
+    description:
+      "Free, open-source menu-bar app for macOS. Stops audio ducking during calls and keeps AirPods at full quality.",
+    images: ["/panel-light.png"],
+  },
+};
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "CallLane",
+  operatingSystem: "macOS",
+  applicationCategory: "UtilitiesApplication",
+  offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+  url: "https://calllane.hardeep.cv",
+  downloadUrl: "https://github.com/rav4nn/calllane/releases",
+  description:
+    "A free, open-source menu-bar app that stops macOS from quieting everything else during calls, and keeps your AirPods at full quality.",
+  license: "https://opensource.org/licenses/MIT",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${display.variable} ${body.variable}`}>
-      <body>{children}</body>
+      <body>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+        {children}
+      </body>
     </html>
   );
 }

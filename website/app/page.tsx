@@ -35,7 +35,7 @@ export default function Page() {
 
         <section className="video-section wrap">
           <div className="video-frame">
-            <video controls preload="metadata" playsInline>
+            <video controls preload="metadata" playsInline poster="/demo-poster.webp">
               <source src="/demo-web.mp4" type="video/mp4" />
             </video>
           </div>
@@ -127,7 +127,8 @@ xattr -dr com.apple.quarantine /Applications/CallLane.app`}</code></pre>
                     The last line is needed because CallLane is signed ad-hoc, not
                     with an Apple Developer ID. Without it macOS says it cannot
                     verify the app, and you must allow it once under
-                    Privacy &amp; Security.
+                    Privacy &amp; Security. This is not a normal requirement for
+                    most Mac apps &mdash; notarization is planned.
                   </span>
                 </li>
                 <li>
@@ -152,13 +153,23 @@ xattr -dr com.apple.quarantine /Applications/CallLane.app`}</code></pre>
           </div>
         </section>
 
+        <section className="section wrap beta-callout">
+          <p className="beta-text">
+            <strong>Early open-source beta.</strong> CallLane is currently ad-hoc
+            signed, so macOS requires a one-time <code>xattr</code> step during
+            installation. Notarization is planned. If you try it on a different
+            Mac, headset, or call app,{" "}
+            <a href={`${REPO}/issues`}>feedback is welcome</a>.
+          </p>
+        </section>
+
         <section className="section wrap" id="limits">
           <h2>Honest limits</h2>
           <ul className="limits-list">
             <li>It adds about 10 to 15 ms of latency to call audio. Imperceptible in use.</li>
             <li>Spatial Audio and head tracking may not apply to the call.</li>
             <li>Requires macOS 14 or later. Tested on macOS 26 with AirPods Pro 3.</li>
-            <li>Signed ad-hoc, so macOS asks you to allow it once. The install steps above cover it.</li>
+            <li>Open-source and ad-hoc signed. See the beta note above for details.</li>
           </ul>
         </section>
 
