@@ -29,6 +29,18 @@ export default function Page() {
           <Demo />
         </section>
 
+        <section className="together">
+          <h2>Made for watching something together on a call</h2>
+          <p>
+            You are on FaceTime or WhatsApp with someone, and you press play on the
+            same film. The second the call connects, the film drops to a whisper and
+            the call sits on top of it. You turn the volume up, the call gets loud,
+            the film is still quiet. CallLane ends that. The film plays at full
+            volume, the call sits where you set it, and your AirPods sound like
+            AirPods for the whole evening.
+          </p>
+        </section>
+
         <section className="fixes" id="how">
           <h2>Two fixes in one menu-bar icon</h2>
           <div className="fix">
@@ -50,6 +62,8 @@ export default function Page() {
               AirPods keep streaming at full quality.
             </p>
           </div>
+          <Routing />
+          <p className="works">Works with FaceTime, WhatsApp, Zoom, Meet, Slack, Teams and Discord.</p>
         </section>
 
         <section className="setup" id="install">
@@ -124,6 +138,42 @@ xattr -dr com.apple.quarantine /Applications/CallLane.app`}</code></pre>
         <a href="https://hardeep.cv">Made by Hardeep</a>
       </footer>
     </>
+  );
+}
+
+function Routing() {
+  return (
+    <div className="routing-wrap">
+    <svg className="routing" viewBox="0 0 760 240" role="img" aria-labelledby="routing-title">
+      <title id="routing-title">Audio routing with CallLane. Spotify and Safari play straight to the headphones. FaceTime plays into the CallLane device, which copies it to the headphones. macOS lowers only what plays on the CallLane device.</title>
+      <g className="node">
+        <rect x="10" y="20" width="170" height="44" rx="10" />
+        <text x="95" y="47">Spotify, YouTube</text>
+      </g>
+      <g className="node">
+        <rect x="10" y="98" width="170" height="44" rx="10" />
+        <text x="95" y="125">Safari, games</text>
+      </g>
+      <g className="node call">
+        <rect x="10" y="176" width="170" height="44" rx="10" />
+        <text x="95" y="203">FaceTime, WhatsApp</text>
+      </g>
+      <g className="node lane">
+        <rect x="300" y="176" width="170" height="44" rx="10" />
+        <text x="385" y="203">CallLane device</text>
+      </g>
+      <g className="node out">
+        <rect x="580" y="98" width="170" height="44" rx="10" />
+        <text x="665" y="125">Your headphones</text>
+      </g>
+      <path className="wire full" d="M180 42 C 400 42, 420 120, 580 120" />
+      <path className="wire full" d="M180 120 L 580 120" />
+      <path className="wire call" d="M180 198 L 300 198" />
+      <path className="wire call" d="M470 198 C 520 198, 540 120, 580 120" />
+      <text className="tag" x="240" y="184">ducked 20 dB</text>
+      <text className="tag" x="240" y="30">full volume</text>
+    </svg>
+    </div>
   );
 }
 

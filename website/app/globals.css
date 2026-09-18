@@ -169,3 +169,16 @@ footer a:hover { color: var(--ink); text-decoration: underline; }
   main > section { padding-block: 2.75rem; }
   .row { grid-template-columns: 3.8rem 1fr 3.4rem; }
 }
+
+.routing { display: block; width: 100%; max-width: 760px; height: auto; margin-top: 2.5rem; font-size: 15px; }
+.routing .node rect { fill: var(--card); stroke: var(--line); }
+.routing .node text { fill: var(--ink); text-anchor: middle; font-weight: 500; }
+.routing .node.lane rect { stroke: var(--call); }
+.routing .wire { fill: none; stroke-width: 3; stroke-linecap: round; }
+.routing .wire.full { stroke: var(--music); }
+.routing .wire.call { stroke: var(--call); }
+.routing .tag { fill: var(--muted); font-size: 13px; }
+.works { color: var(--muted); font-size: .95rem; margin-top: 1rem; }
+.together p { font-size: 1.15rem; max-width: 58ch; }
+.routing-wrap { overflow-x: auto; margin-top: 2.5rem; }
+.routing { margin-top: 0; min-width: 560px; }
