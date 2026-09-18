@@ -165,7 +165,7 @@ struct MeterView: View {
                 Text("Headphones").font(.system(size: 22, weight: .semibold)).frame(width: 150, alignment: .leading)
                 Text(quality.0).font(.system(size: 22, weight: .medium)).foregroundStyle(quality.1)
             }
-            Text("\(model.device)  ·  music from \(model.musicName), call from \(model.callName)")
+            Text(model.device)
                 .font(.system(size: 14)).foregroundStyle(.secondary).lineLimit(1)
             if !model.error.isEmpty { Text(model.error).font(.system(size: 13)).foregroundStyle(.red) }
         }
