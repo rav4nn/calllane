@@ -10,9 +10,12 @@ final class FakeAudioSystem: AudioSystem {
     var running: Set<AudioObjectID> = []
     var nextID: AudioObjectID = 1000
     var handlers: [AudioObjectID: [AudioObjectPropertySelector: () -> Void]] = [:]
+    /// Every `setDefaultOutput`, in order.
+    var outputSets: [AudioObjectID] = []
     /// Every registration, in order. `handlers` overwrites; this shows a re-registration.
     var listenLog: [(object: AudioObjectID, selector: AudioObjectPropertySelector)] = []
     var failSetDefaultInput = false
+    var failSetDefaultOutput = false
     var installedDriverVersion: String? = "0.2.0"
     var micAllowed: Bool? = true
     var micRequests = 0
@@ -24,12 +27,21 @@ final class FakeAudioSystem: AudioSystem {
         list.append(AudioDevice(id: nextID, uid: uid, name: name, transport: transport, hasInput: input, hasOutput: output))
         return nextID
     }
+    /// Adds an output on an id CoreAudio handed out before — what a restart does when the ids
+    /// come back unchanged, or when one is reused for another device.
+    func reAddOutput(_ name: String, uid: String, id: AudioObjectID) {
+        list.append(AudioDevice(id: id, uid: uid, name: name, transport: 0, hasInput: false, hasOutput: true))
+    }
     func remove(_ id: AudioObjectID) { list.removeAll { $0.id == id } }
 
     func devices() -> [AudioDevice] { list }
     func defaultOutput() -> AudioObjectID? { defaultOut }
     func defaultInput() -> AudioObjectID? { defaultIn }
-    func setDefaultOutput(_ id: AudioObjectID) throws { defaultOut = id }
+    func setDefaultOutput(_ id: AudioObjectID) throws {
+        outputSets.append(id)   // the attempt, failed or not
+        if failSetDefaultOutput { throw AudioError(what: "set default output", status: -1) }
+        defaultOut = id
+    }
     func setDefaultInput(_ id: AudioObjectID) throws {
         if failSetDefaultInput { throw AudioError(what: "set default input", status: -1) }
         defaultIn = id

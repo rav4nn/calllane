@@ -19,6 +19,8 @@ final class Controller {
     private let engine: EngineControl
     private let defaults: UserDefaults
     private let appVersion: String
+    /// Monotonic: a clock that jumps backwards must not extend the heal's window.
+    private let now: () -> ContinuousClock.Instant
     private var tokens: [ListenerToken] = []
     private var runningToken: ListenerToken?
     private var runningWatched: AudioObjectID?
@@ -26,6 +28,12 @@ final class Controller {
     /// The last real output the user had; where the system output goes back to when CallLane
     /// must not stay the system output.
     private var lastRealOutput: AudioObjectID?
+    /// Its UID. A coreaudiod restart can hand the same device a new id; the UID survives.
+    private var lastRealOutputUID: String?
+    /// Armed by a coreaudiod restart: the output to put back when it re-registers, and the
+    /// moment we stop waiting for it.
+    private var healOutputUID: String?
+    private var healDeadline = ContinuousClock.now   // only read while `healOutputUID` is set
     private var tapID: AudioObjectID?
     private var driverVersion: String?
     private var microphoneRequested = false
@@ -45,11 +53,13 @@ final class Controller {
     private(set) var status = ""
 
     init(audio: AudioSystem, engine: EngineControl, defaults: UserDefaults = .standard,
-         appVersion: String = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0") {
+         appVersion: String = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0",
+         now: @escaping () -> ContinuousClock.Instant = { .now }) {
         self.audio = audio
         self.engine = engine
         self.defaults = defaults
         self.appVersion = appVersion
+        self.now = now
     }
 
     // MARK: derived
@@ -109,7 +119,7 @@ final class Controller {
         // Every install, upgrade and uninstall runs `killall coreaudiod`. This is the property
         // that fires when it comes back, and the only reliable signal: the device ids often
         // come back identical, so nothing else tells us our listeners and units are dead.
-        if let t = audio.listen(AudioObjectID(kAudioObjectSystemObject), kAudioHardwarePropertyServiceRestarted, { [weak self] in self?.handleRestart() }) {
+        if let t = audio.listen(AudioObjectID(kAudioObjectSystemObject), kAudioHardwarePropertyServiceRestarted, { [weak self] in self?.handleServiceRestart() }) {
             tokens.append(t)
         }
         // Sleep/wake can re-create the devices behind our units without a restart event.
@@ -121,8 +131,19 @@ final class Controller {
         if let t = wakeToken { NSWorkspace.shared.notificationCenter.removeObserver(t) }
     }
 
+    /// coreaudiod came back. Same teardown as a wake, plus: a Bluetooth headset re-registers late
+    /// and macOS lands the default output on the built-in speaker meanwhile, so arm the heal.
+    /// Only this path arms it — after a wake macOS's own Bluetooth auto-switch is in charge.
+    private func handleServiceRestart() {
+        healOutputUID = lastRealOutputUID
+        // A headset takes 2-10 s to come back after coreaudiod restarts.
+        healDeadline = now().advanced(by: .seconds(15))
+        handleRestart()
+    }
+
     /// The units and the device listener are stale; `reconcile` rebuilds them on the next pass.
-    private func handleRestart() {
+    /// Not private: the wake notification cannot be delivered synchronously in tests.
+    func handleRestart() {
         restarted = true
         scheduleReconcile()
     }
@@ -169,6 +190,7 @@ final class Controller {
         }
         refresh()
         trackRealOutput()
+        healOutputAfterRestart()
         migrateLegacy()
         keepCallsOffSystemOutput()
         reconcileInputLock()
@@ -205,9 +227,38 @@ final class Controller {
     /// Remembers the user's real output. A change of real output also clears any old message:
     /// that is when the user has acted on it.
     private func trackRealOutput() {
-        guard let id = defaultOutputID, outputs.contains(where: { $0.id == id }), id != lastRealOutput else { return }
+        // Both halves matter: a restart can move a device to a new id, and it can hand an old id
+        // to a different device.
+        guard let id = defaultOutputID, let dev = outputs.first(where: { $0.id == id }),
+              id != lastRealOutput || dev.uid != lastRealOutputUID else { return }
+        // The first change after a restart is macOS landing on the speaker — that is what we heal.
+        // A second one is a person, in the menu or in System Settings; their pick wins.
+        if let heal = healOutputUID, lastRealOutputUID != heal { healOutputUID = nil }
         lastRealOutput = id
+        lastRealOutputUID = dev.uid
         status = ""
+    }
+
+    /// Puts the user's output back once, after a coreaudiod restart moved it. `healOutputUID` was
+    /// captured at restart time, before the pass that saw the built-in speaker, so this never
+    /// re-arms itself. Absent device: still waiting — the devices listener brings us back.
+    private func healOutputAfterRestart() {
+        guard let uid = healOutputUID else { return }
+        guard now() <= healDeadline else { healOutputUID = nil; return }   // by now the user may have picked something else
+        guard let dev = outputs.first(where: { $0.uid == uid }) else { return }
+        guard defaultOutputID != dev.id else { healOutputUID = nil; return }   // macOS put it back itself
+        // A write that failed keeps its turn: CoreAudio is flaky right after a restart. Nothing
+        // else guarantees another event, so drive the retry from here; the deadline bounds it.
+        guard attempt("Could not restore output after restart", { try audio.setDefaultOutput(dev.id) }) else {
+            scheduleReconcile()
+            return
+        }
+        healOutputUID = nil
+        // This IS the user's real output now; without it the next pass reads our own write as a
+        // change of output and wipes the message.
+        lastRealOutput = dev.id
+        lastRealOutputUID = dev.uid
+        status = "Output put back to \(dev.name) after an audio restart."
     }
 
     /// Runs one CoreAudio write that enforces an app invariant. A failure is never silent:
@@ -305,6 +356,7 @@ final class Controller {
     // MARK: user actions
 
     func selectOutput(_ id: AudioObjectID) {
+        healOutputUID = nil   // an explicit pick outranks any restart still waiting for its device
         try? audio.setDefaultOutput(id)
         reconcile()
     }

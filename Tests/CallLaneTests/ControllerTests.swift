@@ -262,6 +262,136 @@ import CoreAudio
         #expect(engine.stops == after)
     }
 
+    // MARK: the output comes back after a coreaudiod restart
+
+    /// Install, upgrade and uninstall all run `killall coreaudiod`: the headset drops off for a
+    /// moment and macOS lands the default output on the built-in speaker.
+    private func restartWithAirPodsGone(_ c: Controller) {
+        c.start()
+        fake.remove(airpods)
+        fake.defaultOut = speakers
+        fake.restartService()
+        c.reconcile()
+        #expect(fake.outputSets.isEmpty, "nothing to put the output back to while the headset is away")
+    }
+
+    @Test func restartPutsTheOutputBackWhenTheHeadsetReturns() {
+        let c = makeController()
+        restartWithAirPodsGone(c)
+        let returned = fake.addDevice("AirPods", uid: "ap:out")   // a new id, as after a real restart
+        c.reconcile()
+        #expect(fake.outputSets == [returned])
+        #expect(fake.defaultOut == returned)
+        #expect(c.status.hasPrefix("Output put back"))
+        c.reconcile()
+        #expect(c.status.hasPrefix("Output put back"), "our own write is not a user output change")
+        #expect(fake.outputSets == [returned], "put back once, not on every pass")
+    }
+
+    @Test func restartPutsTheOutputBackWhenTheIDIsUnchanged() {
+        let c = makeController()
+        restartWithAirPodsGone(c)
+        fake.reAddOutput("AirPods", uid: "ap:out", id: airpods)
+        c.reconcile()
+        #expect(fake.outputSets == [airpods])
+    }
+
+    @Test func aFailedRestoreKeepsTryingUntilTheDeadline() {
+        let c = makeController()
+        restartWithAirPodsGone(c)
+        fake.failSetDefaultOutput = true
+        let returned = fake.addDevice("AirPods", uid: "ap:out")
+        c.reconcile()
+        #expect(fake.defaultOut == speakers)
+        #expect(c.status.hasPrefix("Could not restore output after restart"))
+        fake.failSetDefaultOutput = false
+        c.reconcile()
+        #expect(fake.defaultOut == returned)
+        #expect(c.status.hasPrefix("Output put back"))
+    }
+
+    @Test func pickingAnOutputDuringTheWaitCancelsTheHeal() {
+        let c = makeController()
+        restartWithAirPodsGone(c)
+        c.selectOutput(speakers)                                  // the user decides, not us
+        fake.outputSets = []
+        fake.addDevice("AirPods", uid: "ap:out")
+        c.reconcile()
+        #expect(fake.outputSets.isEmpty)
+        #expect(fake.defaultOut == speakers)
+    }
+
+    @Test func anOutputPickedOutsideTheAppDuringTheWaitCancelsTheHeal() {
+        let c = makeController()
+        restartWithAirPodsGone(c)
+        let usb = fake.addDevice("USB Speakers", uid: "usb:out")
+        fake.defaultOut = usb                                     // picked in System Settings
+        c.reconcile()
+        fake.addDevice("AirPods", uid: "ap:out")
+        c.reconcile()
+        #expect(fake.outputSets.isEmpty)
+        #expect(fake.defaultOut == usb)
+    }
+
+    @Test func aReusedIDWithANewUIDCountsAsANewRealOutput() {
+        let c = makeController()
+        c.start()
+        fake.remove(airpods)
+        fake.reAddOutput("USB Speakers", uid: "usb:out", id: airpods)   // coreaudiod reuses the id
+        c.reconcile()
+        fake.remove(airpods)
+        fake.defaultOut = speakers
+        fake.restartService()
+        c.reconcile()
+        fake.addDevice("AirPods", uid: "ap:out")
+        c.reconcile()
+        #expect(fake.outputSets.isEmpty, "the heal wants the device that was really there, not the one that once had its id")
+    }
+
+    @Test func noSwitchWhenMacOSPutsTheOutputBackItself() {
+        let c = makeController()
+        restartWithAirPodsGone(c)
+        fake.defaultOut = fake.addDevice("AirPods", uid: "ap:out")
+        c.reconcile()
+        #expect(fake.outputSets.isEmpty)
+        #expect(c.status.isEmpty)
+    }
+
+    @Test func theHealGivesUpAfterFifteenSeconds() {
+        var clock = ContinuousClock.now
+        let c = Controller(audio: fake, engine: engine, defaults: defaults, appVersion: "0.2.0", now: { clock })
+        c.reconcile()
+        restartWithAirPodsGone(c)
+        clock = clock.advanced(by: .seconds(16))                  // the user has had time to pick something else
+        fake.addDevice("AirPods", uid: "ap:out")
+        c.reconcile()
+        #expect(fake.outputSets.isEmpty)
+    }
+
+    @Test func wakeDoesNotPutTheOutputBack() {
+        let c = makeController()
+        c.start()
+        fake.remove(airpods)
+        fake.defaultOut = speakers
+        c.handleRestart()                                         // the wake path: macOS owns the switch
+        c.reconcile()
+        fake.addDevice("AirPods", uid: "ap:out")
+        c.reconcile()
+        #expect(fake.outputSets.isEmpty)
+    }
+
+    @Test func restartWithNoKnownRealOutputChangesNothing() {
+        fake.defaultOut = nil
+        let c = makeController()
+        c.start()
+        fake.restartService()
+        c.reconcile()
+        fake.addDevice("AirPods 2", uid: "ap2:out")
+        c.reconcile()
+        #expect(fake.outputSets.isEmpty)
+        #expect(fake.defaultOut == nil)
+    }
+
     // MARK: input lock
 
     @Test func inputLockRevertsAndRestoresVolume() {
