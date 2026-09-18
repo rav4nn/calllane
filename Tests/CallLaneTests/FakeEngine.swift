@@ -4,6 +4,7 @@ import CoreAudio
 final class FakeEngine: EngineControl {
     var running: (tap: AudioObjectID, destination: AudioObjectID)?
     var starts = 0
+    var stops = 0
     var failStart = false
 
     func start(tap: AudioObjectID, destination: AudioObjectID) throws {
@@ -13,5 +14,5 @@ final class FakeEngine: EngineControl {
         starts += 1
     }
 
-    func stop() { running = nil }
+    func stop() { running = nil; stops += 1 }
 }

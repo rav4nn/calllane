@@ -239,7 +239,30 @@ import CoreAudio
         #expect(fake.handlers[newCalls]?[kAudioDevicePropertyDeviceIsRunningSomewhere] != nil)
     }
 
-    // MARK: input lock (unchanged behaviour)
+    @Test func coreaudiodRestartRebuildsEverythingEvenWithUnchangedIDs() {
+        let c = makeController()
+        c.start()
+        fake.running.insert(calls)
+        c.reconcile()
+        #expect(engine.running?.tap == tap)
+        let (starts, stops) = (engine.starts, engine.stops)
+        let listens = fake.runningListenerRegistrations(calls)
+
+        fake.restartService()   // ids stay exactly as they are
+        c.reconcile()           // the debounced pass the restart handler asks for
+        #expect(engine.stops == stops + 1, "the old units are torn down")
+        #expect(engine.starts == starts + 1, "and rebuilt on the same pair")
+        #expect(engine.running?.tap == tap)
+        #expect(engine.running?.destination == airpods)
+        #expect(fake.runningListenerRegistrations(calls) == listens + 1)
+
+        // the flag clears: a plain reconcile does not tear the engine down again
+        let after = engine.stops
+        c.reconcile()
+        #expect(engine.stops == after)
+    }
+
+    // MARK: input lock
 
     @Test func inputLockRevertsAndRestoresVolume() {
         let c = makeController()
@@ -268,8 +291,67 @@ import CoreAudio
         let btMic = fake.addDevice("AirPods", uid: "ap:in", input: true, output: false)
         fake.defaultIn = btMic
         fake.failSetDefaultInput = true
-        c.reconcile()
+        for _ in 0..<4 { c.reconcile() }
         #expect(fake.defaultIn == btMic)
-        #expect(c.status.contains("Could not lock input"))
+        #expect(c.status.contains("Could not lock input"), "a failing write keeps retrying, it is not a fight")
+    }
+
+    @Test func inputLockPausesWhenAnotherAppFightsBack() {
+        let c = makeController()
+        c.inputLocked = true
+        let btMic = fake.addDevice("AirPods", uid: "ap:in", input: true, output: false)
+        var reverts = 0
+        for _ in 0..<4 {                       // a call app grabbing the input, four times over
+            fake.defaultIn = btMic
+            c.reconcile()
+            if fake.defaultIn == mic { reverts += 1 }
+        }
+        #expect(reverts == 3)
+        #expect(fake.defaultIn == btMic, "the fourth deviation stands")
+        #expect(c.status.hasPrefix("Lock input paused"))
+
+        c.inputLocked = false                  // off/on is the documented way out
+        c.inputLocked = true
+        #expect(c.status.isEmpty)
+        fake.defaultIn = btMic
+        c.reconcile()
+        #expect(fake.defaultIn == mic, "reverts resume after the toggle")
+    }
+
+    @Test func inputLockLeavesTheGainAloneWhileTheDeviceIsRight() {
+        let c = makeController()
+        c.inputLocked = true                   // saves mic at 1.0
+        fake.inputVolumes[mic] = 0.4           // the user turns it down in System Settings
+        c.reconcile()
+        #expect(fake.inputVolumes[mic] == 0.4)
+
+        let btMic = fake.addDevice("AirPods", uid: "ap:in", input: true, output: false)
+        fake.defaultIn = btMic                 // now an app takes the device and its gain
+        fake.inputVolumes[mic] = 0.1
+        c.reconcile()
+        #expect(fake.defaultIn == mic)
+        #expect(fake.inputVolumes[mic] == 1.0)
+    }
+
+    // MARK: quit and unlock restore what the user had
+
+    @Test func shutdownRestoresThePreviousInputAndVolume() {
+        fake.inputVolumes[mic] = 0.7
+        let c = makeController()
+        c.inputLocked = true
+        let usb = fake.addDevice("USB Mic", uid: "usb", input: true, output: false)
+        fake.inputVolumes[usb] = 0.2
+        c.reconcile()                          // the picker only offers devices the app has seen
+        c.selectInput(usb)
+        #expect(fake.defaultIn == usb)
+
+        c.shutdown()
+        #expect(fake.defaultIn == mic)
+        #expect(fake.inputVolumes[mic] == 0.7)
+        #expect(defaults.string(forKey: "previousInputUID") == "mic", "the lock is still on next launch")
+
+        c.inputLocked = false
+        #expect(defaults.string(forKey: "previousInputUID") == nil)
+        #expect(defaults.object(forKey: "previousInputVolume") as? Float == nil)
     }
 }

@@ -10,6 +10,8 @@ final class FakeAudioSystem: AudioSystem {
     var running: Set<AudioObjectID> = []
     var nextID: AudioObjectID = 1000
     var handlers: [AudioObjectID: [AudioObjectPropertySelector: () -> Void]] = [:]
+    /// Every registration, in order. `handlers` overwrites; this shows a re-registration.
+    var listenLog: [(object: AudioObjectID, selector: AudioObjectPropertySelector)] = []
     var failSetDefaultInput = false
     var installedDriverVersion: String? = "0.2.0"
     var micAllowed: Bool? = true
@@ -46,6 +48,17 @@ final class FakeAudioSystem: AudioSystem {
     func destroyAggregate(_ id: AudioObjectID) throws { remove(id) }
     func listen(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector, _ handler: @escaping () -> Void) -> ListenerToken? {
         handlers[object, default: [:]][selector] = handler
+        listenLog.append((object, selector))
         return ListenerToken.fake()
+    }
+
+    /// Fires the ServiceRestarted listener leaving the device ids alone — after a real
+    /// `killall coreaudiod` they usually come back identical.
+    func restartService() {
+        handlers[AudioObjectID(kAudioObjectSystemObject)]?[kAudioHardwarePropertyServiceRestarted]?()
+    }
+
+    func runningListenerRegistrations(_ id: AudioObjectID) -> Int {
+        listenLog.filter { $0.object == id && $0.selector == kAudioDevicePropertyDeviceIsRunningSomewhere }.count
     }
 }

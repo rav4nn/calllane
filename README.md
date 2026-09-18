@@ -105,6 +105,10 @@ and the call plays through those headphones, so the call follows.
 `brew uninstall --cask calllane` removes the app and the driver and restarts the audio
 daemon. From a source build: `make uninstall-driver`.
 
+Quitting CallLane — which both of those do first — puts the input device and its volume
+back to what they were before Lock input was switched on. Force-killing the app cannot run
+that handler, so the input stays where the lock left it.
+
 ## Licence
 
 The app is MIT (see `LICENSE`). The driver in `Driver/` is a derivative of

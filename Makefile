@@ -66,7 +66,9 @@ pkg: driver
 install-driver: pkg
 	sudo installer -pkg $(PKG) -target /
 
+# Quit first: the app's quit handler puts the input device and gain back (the cask does the same).
 uninstall-driver:
+	-osascript -e 'quit app "$(APP)"'
 	sudo rm -rf $(HAL_DIR)/$(APP).driver
 	sudo pkgutil --forget dev.rav4nn.calllane.driver || true
 	sudo killall coreaudiod

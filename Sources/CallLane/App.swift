@@ -11,8 +11,13 @@ struct CallLaneApp: App {
     private let loginItem = LoginItem()
 
     init() {
-        controller = Controller(audio: CoreAudioSystem(), engine: Engine())
+        let controller = Controller(audio: CoreAudioSystem(), engine: Engine())
+        self.controller = controller
         controller.start()
+        // Quit puts the input device and its gain back. The cask's uninstall quits the app
+        // first, so this covers uninstall too. A force-kill cannot be handled.
+        NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification,
+                                               object: nil, queue: .main) { _ in controller.shutdown() }
         // `scripts/snap.sh` screenshots this window: the menu bar popover cannot be captured.
         if CommandLine.arguments.contains("--preview") { showPreviewWindow() }
     }

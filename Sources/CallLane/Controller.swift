@@ -1,3 +1,4 @@
+import AppKit
 import CoreAudio
 import Foundation
 import Observation
@@ -12,6 +13,7 @@ final class Controller {
     static let legacyUID = "dev.rav4nn.calllane.calls"
     private static let ownUIDs: Set<String> = [callsUID, tapUID, legacyUID]
     static let microphoneDenied = "Microphone access denied. CallLane reads its hidden tap like a mic. Allow CallLane under System Settings → Privacy & Security → Microphone."
+    static let lockPaused = "Lock input paused: another app keeps changing the microphone. Turn Lock input off and on to resume."
 
     private let audio: AudioSystem
     private let engine: EngineControl
@@ -27,6 +29,13 @@ final class Controller {
     private var tapID: AudioObjectID?
     private var driverVersion: String?
     private var microphoneRequested = false
+    /// Set when coreaudiod restarted or the Mac woke: our AudioUnits and the listener we hold
+    /// on the CallLane device are stale. The system-object listeners survive — that object is
+    /// always id 1 and the HAL re-applies their registrations itself.
+    private var restarted = false
+    private var wakeToken: NSObjectProtocol?
+    /// When the lock had to revert the default input, most recent last.
+    private var lockReverts: [Date] = []
 
     private(set) var devices: [AudioDevice] = []
     private(set) var defaultOutputID: AudioObjectID?
@@ -68,9 +77,21 @@ final class Controller {
             if newValue, let id = audio.defaultInput(), let dev = devices.first(where: { $0.id == id }) {
                 defaults.set(dev.uid, forKey: "lockedInputUID")
                 defaults.set(audio.volume(id, scope: .input) ?? 1, forKey: "lockedInputVolume")
+                // What the user had before CallLane ever touched the input. Kept across
+                // re-locks, so quit restores the original, not the last locked device.
+                if defaults.string(forKey: "previousInputUID") == nil {
+                    defaults.set(dev.uid, forKey: "previousInputUID")
+                    defaults.set(audio.volume(id, scope: .input) ?? 1, forKey: "previousInputVolume")
+                }
             } else {
                 defaults.removeObject(forKey: "lockedInputUID")
+                if !newValue {
+                    restorePreviousInput()
+                    defaults.removeObject(forKey: "previousInputUID")
+                    defaults.removeObject(forKey: "previousInputVolume")
+                }
             }
+            clearLockFight()
             reconcile()
         }
     }
@@ -85,6 +106,48 @@ final class Controller {
                 tokens.append(t)
             }
         }
+        // Every install, upgrade and uninstall runs `killall coreaudiod`. This is the property
+        // that fires when it comes back, and the only reliable signal: the device ids often
+        // come back identical, so nothing else tells us our listeners and units are dead.
+        if let t = audio.listen(AudioObjectID(kAudioObjectSystemObject), kAudioHardwarePropertyServiceRestarted, { [weak self] in self?.handleRestart() }) {
+            tokens.append(t)
+        }
+        // Sleep/wake can re-create the devices behind our units without a restart event.
+        wakeToken = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in self?.handleRestart() }
+    }
+
+    deinit {
+        if let t = wakeToken { NSWorkspace.shared.notificationCenter.removeObserver(t) }
+    }
+
+    /// The units and the device listener are stale; `reconcile` rebuilds them on the next pass.
+    private func handleRestart() {
+        restarted = true
+        scheduleReconcile()
+    }
+
+    /// Puts the input back where the user had it before the lock ever moved it.
+    /// Runs on unlock and on quit — a force-kill (SIGKILL) cannot be handled, so nothing runs then.
+    func shutdown() {
+        engine.stop()
+        refresh()
+        restorePreviousInput()   // the keys stay: on the next launch the lock is still on
+    }
+
+    private func restorePreviousInput() {
+        guard let uid = defaults.string(forKey: "previousInputUID"),
+              let dev = devices.first(where: { $0.uid == uid && $0.hasInput }) else { return }
+        attempt("Could not restore the previous input", { try audio.setDefaultInput(dev.id) })
+        if let level = defaults.object(forKey: "previousInputVolume") as? Float {
+            attempt("Could not restore the previous input volume", { try audio.setVolume(dev.id, scope: .input, level) })
+        }
+    }
+
+    /// A user decision about the lock ends any pause from a fight with another app.
+    private func clearLockFight() {
+        lockReverts = []
+        if status == Self.lockPaused { status = "" }
     }
 
     // Bluetooth connects fire a burst of events; run once after the burst.
@@ -98,6 +161,12 @@ final class Controller {
     // MARK: rules — idempotent, safe to call at any time
 
     func reconcile() {
+        if restarted {
+            restarted = false
+            engine.stop()          // the units point at devices that no longer exist
+            runningToken = nil
+            runningWatched = nil   // force a fresh registration even on an unchanged id
+        }
         refresh()
         trackRealOutput()
         migrateLegacy()
@@ -111,9 +180,13 @@ final class Controller {
     }
 
     /// A call app opening CallLane fires no system-level event, so watch the device itself.
-    /// The device gets a new id whenever coreaudiod restarts; re-register when that happens.
+    /// A coreaudiod restart is NOT guaranteed to change the device id, so the id alone cannot
+    /// tell us the listener died: `reconcile` clears `runningWatched` on the restart event.
     private func watchRunning() {
         guard callsDevice?.id != runningWatched else { return }
+        // This may run inside the old token's own listener block; CoreAudio deadlocks if the
+        // block is removed from within itself, so let it return first.
+        if let old = runningToken { DispatchQueue.main.async { _ = old } }
         runningToken = nil
         runningWatched = nil
         guard let calls = callsDevice else { return }
@@ -209,9 +282,20 @@ final class Controller {
     private func reconcileInputLock() {
         guard let uid = defaults.string(forKey: "lockedInputUID"),
               let locked = devices.first(where: { $0.uid == uid && $0.hasInput }) else { return }
-        if defaultInputID != locked.id {
-            attempt("Could not lock input to \(locked.name)", { try audio.setDefaultInput(locked.id) })
+        // Already right: leave the volume alone so the user can set the gain in System Settings.
+        guard defaultInputID != locked.id else { return }
+        // Teams and Zoom re-pick the input on every call start; without a cap the two of us
+        // ping-pong forever. More than 3 reverts within 5 s means a fight, not a user.
+        lockReverts.removeAll { Date().timeIntervalSince($0) > 5 }
+        guard lockReverts.count < 3 else {
+            status = Self.lockPaused
+            return
         }
+        // Only a revert that landed counts as a round of the fight: a CoreAudio write that
+        // failed must keep retrying with its own error visible, not hide behind the pause.
+        guard attempt("Could not lock input to \(locked.name)", { try audio.setDefaultInput(locked.id) }) else { return }
+        lockReverts.append(Date())
+        // The app that took the device usually took its gain too; put that back in the same pass.
         let level = defaults.object(forKey: "lockedInputVolume") as? Float ?? 1
         if let current = audio.volume(locked.id, scope: .input), abs(current - level) > 0.01 {
             attempt("Could not restore input volume", { try audio.setVolume(locked.id, scope: .input, level) })
@@ -231,6 +315,7 @@ final class Controller {
             defaults.set(dev.uid, forKey: "lockedInputUID")
             defaults.set(audio.volume(id, scope: .input) ?? 1, forKey: "lockedInputVolume")
         }
+        clearLockFight()
         reconcile()
     }
 

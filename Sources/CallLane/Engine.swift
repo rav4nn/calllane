@@ -148,8 +148,12 @@ final class Engine: EngineControl {
     }
 
     func stop() {
-        for unit in [inUnit, outUnit].compactMap({ $0 }) {
-            AudioOutputUnitStop(unit)
+        let units = [inUnit, outUnit].compactMap { $0 }
+        // Stop both IO procs before disposing either: `AudioOutputUnitStop` blocks until the
+        // proc returns, so `capture` can no longer be inside `AudioUnitRender(inUnit)` when the
+        // input unit goes away.
+        for unit in units { AudioOutputUnitStop(unit) }
+        for unit in units {
             AudioUnitUninitialize(unit)
             AudioComponentInstanceDispose(unit)
         }

@@ -16,6 +16,7 @@
 #include <dispatch/dispatch.h>
 #include <mach/mach_time.h>
 #include <pthread.h>
+#include <stdatomic.h>
 #include <stdint.h>
 #include <sys/syslog.h>
 #include <Accelerate/Accelerate.h>
@@ -338,6 +339,13 @@ static const UInt32                 kDevice_SampleRatesSize             = sizeof
 #define                             kBytes_Per_Frame                    (kNumber_Of_Channels * kBytes_Per_Channel)
 #define                             kRing_Buffer_Frame_Size             ((65536 + kLatency_Frame_Size))
 static Float32*                     gRingBuffer = NULL;
+
+//	Written by the WriteMix IO thread and read by the ReadInput one. _Atomic so neither can
+//	tear or read a half-written value; no lock, the IO path must not take one.
+//	ponytail: the ring clear in ReadInput can still overlap a WriteMix memcpy — a glitch, not a
+//	crash, same as upstream BlackHole. Upgrade path: clear from the writer side instead.
+static _Atomic Float64              lastOutputSampleTime = 0;
+static _Atomic Boolean              isBufferClear = true;
 
 
 //==================================================================================================
@@ -4324,16 +4332,24 @@ static OSStatus	BlackHole_StartIO(AudioServerPlugInDriverRef inDriver, AudioObje
 	//	check the arguments
 	FailWithAction(inDriver != gAudioServerPlugInDriverRef, theAnswer = kAudioHardwareBadObjectError, Done, "BlackHole_StartIO: bad driver reference");
 	FailWithAction(inDeviceObjectID != kObjectID_Device && inDeviceObjectID != kObjectID_Device2, theAnswer = kAudioHardwareBadObjectError, Done, "BlackHole_StartIO: bad device ID");
-    FailWithAction(inDeviceObjectID == kObjectID_Device && gDevice_IOIsRunning == UINT64_MAX, theAnswer = kAudioHardwareIllegalOperationError, Done, "BlackHole_StartIO: overflow error.");
-    FailWithAction(inDeviceObjectID == kObjectID_Device2 && gDevice2_IOIsRunning == UINT64_MAX, theAnswer = kAudioHardwareIllegalOperationError, Done, "BlackHole_StartIO: overflow error.");
 
 	//	we need to hold the state lock
 	pthread_mutex_lock(&gPlugIn_StateMutex);
-	
-    
+
+    //  the counters are shared: read them under the lock, or two concurrent calls both pass
+    //  the guard and the counter wraps.
+    if ((inDeviceObjectID == kObjectID_Device && gDevice_IOIsRunning == UINT64_MAX) ||
+        (inDeviceObjectID == kObjectID_Device2 && gDevice2_IOIsRunning == UINT64_MAX))
+    {
+        pthread_mutex_unlock(&gPlugIn_StateMutex);
+        DebugMsg("BlackHole_StartIO: overflow error.");
+        theAnswer = kAudioHardwareIllegalOperationError;
+        goto Done;
+    }
+
     if (inDeviceObjectID == kObjectID_Device) { gDevice_IOIsRunning += 1; }
     if (inDeviceObjectID == kObjectID_Device2) { gDevice2_IOIsRunning += 1; }
-    
+
     // allocate ring buffer
     if ((gDevice_IOIsRunning || gDevice2_IOIsRunning) && gRingBuffer == NULL)
     {
@@ -4342,12 +4358,22 @@ static OSStatus	BlackHole_StartIO(AudioServerPlugInDriverRef inDriver, AudioObje
         gDevice_AnchorHostTime = mach_absolute_time();
         gDevice_PreviousTicks = 0;
         gRingBuffer = calloc(kRing_Buffer_Frame_Size * kNumber_Of_Channels, sizeof(Float32));
+        if (gRingBuffer == NULL)
+        {
+            // undo the increment: this client never started
+            if (inDeviceObjectID == kObjectID_Device) { gDevice_IOIsRunning -= 1; }
+            if (inDeviceObjectID == kObjectID_Device2) { gDevice2_IOIsRunning -= 1; }
+            pthread_mutex_unlock(&gPlugIn_StateMutex);
+            DebugMsg("BlackHole_StartIO: could not allocate the ring buffer.");
+            theAnswer = kAudioHardwareUnspecifiedError;
+            goto Done;
+        }
     }
-    
-    
+
+
 	//	unlock the state lock
 	pthread_mutex_unlock(&gPlugIn_StateMutex);
-	
+
 Done:
 	return theAnswer;
 }
@@ -4365,13 +4391,21 @@ static OSStatus	BlackHole_StopIO(AudioServerPlugInDriverRef inDriver, AudioObjec
 	//	check the arguments
 	FailWithAction(inDriver != gAudioServerPlugInDriverRef, theAnswer = kAudioHardwareBadObjectError, Done, "BlackHole_StopIO: bad driver reference");
 	FailWithAction(inDeviceObjectID != kObjectID_Device && inDeviceObjectID != kObjectID_Device2, theAnswer = kAudioHardwareBadObjectError, Done, "BlackHole_StopIO: bad device ID");
-    FailWithAction(inDeviceObjectID == kObjectID_Device && gDevice_IOIsRunning == 0, theAnswer = kAudioHardwareIllegalOperationError, Done, "BlackHole_StartIO: underflow error.");
-    FailWithAction(inDeviceObjectID == kObjectID_Device2 && gDevice2_IOIsRunning == 0, theAnswer = kAudioHardwareIllegalOperationError, Done, "BlackHole_StartIO: underflow error.");
 
 	//	we need to hold the state lock
 	pthread_mutex_lock(&gPlugIn_StateMutex);
-	
-    
+
+    //  under the lock: two concurrent stops would otherwise both pass a `== 0` check outside it
+    //  and wrap the counter to UINT64_MAX, pinning DeviceIsRunning until coreaudiod restarts.
+    if ((inDeviceObjectID == kObjectID_Device && gDevice_IOIsRunning == 0) ||
+        (inDeviceObjectID == kObjectID_Device2 && gDevice2_IOIsRunning == 0))
+    {
+        pthread_mutex_unlock(&gPlugIn_StateMutex);
+        DebugMsg("BlackHole_StopIO: underflow error.");
+        theAnswer = kAudioHardwareIllegalOperationError;
+        goto Done;
+    }
+
     if (inDeviceObjectID == kObjectID_Device) { gDevice_IOIsRunning -= 1; }
     if (inDeviceObjectID == kObjectID_Device2) { gDevice2_IOIsRunning -= 1; }
     
@@ -4546,13 +4580,20 @@ static OSStatus	BlackHole_DoIOOperation(AudioServerPlugInDriverRef inDriver, Aud
         secondPartFrameSize = inIOBufferFrameSize - firstPartFrameSize;
     }
     
-    // Keep track of last outputSampleTime and the cleared buffer status.
-    static Float64 lastOutputSampleTime = 0;
-    static Boolean isBufferClear = true;
-    
     // From BlackHole to Application
     if(inOperationID == kAudioServerPlugInIOOperationReadInput)
     {
+        // StopIO frees the ring. Once the last client has stopped that is the steady state,
+        // and without this check every cycle dereferences NULL.
+        // ponytail: closes the NULL case, not the free-during-cycle one — StopIO can still free
+        // between this check and the memcpy below, exactly as upstream BlackHole can. Upgrade
+        // path: allocate one ring for the driver's lifetime and never free it.
+        if (gRingBuffer == NULL)
+        {
+            vDSP_vclr(ioMainBuffer, 1, inIOBufferFrameSize * kNumber_Of_Channels);
+            return noErr;
+        }
+
         // If mute is one let's just fill the buffer with zeros or if there's no apps outputting audio
         if (gMute_Master_Value || lastOutputSampleTime - inIOBufferFrameSize < inIOCycleInfo->mInputTime.mSampleTime)
         {
@@ -4584,7 +4625,9 @@ static OSStatus	BlackHole_DoIOOperation(AudioServerPlugInDriverRef inDriver, Aud
     // From Application to BlackHole
     if(inOperationID == kAudioServerPlugInIOOperationWriteMix)
     {
-        
+        // Same as ReadInput above: covers the freed steady state, not a free mid-cycle.
+        if (gRingBuffer == NULL) { return noErr; }
+
         // Overload error.
         if (inIOCycleInfo->mCurrentTime.mSampleTime > inIOCycleInfo->mOutputTime.mSampleTime + inIOBufferFrameSize + kLatency_Frame_Size)
         {
