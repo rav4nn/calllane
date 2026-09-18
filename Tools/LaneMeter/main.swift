@@ -27,11 +27,17 @@ final class Level { var rms: Float = 0 }
 /// One process tap feeding an RMS reading. Destroyed on deinit, which Swift also runs when
 /// the initializer throws after the stored properties are set, so a failed init leaks nothing.
 final class Tap {
-    let level = Level()
+    let level: Level
     var rms: Float { level.rms }
     private var tap = AudioObjectID(0), agg = AudioObjectID(0), proc: AudioDeviceIOProcID?
+    private let owned: Bool
+
+    /// Meter the input of a device somebody else already runs (a live microphone). Not owned, so not
+    /// destroyed. The caller passes the Level so a rebuilt reader keeps the last reading.
+    init(device: AudioObjectID, level: Level) throws { owned = false; self.level = level; agg = device; try start() }
 
     init(_ desc: CATapDescription, name: String) throws {
+        owned = true; level = Level()
         desc.uuid = UUID(); desc.muteBehavior = .unmuted; desc.name = "LaneMeter \(name)"; desc.isPrivate = true
         var err = AudioHardwareCreateProcessTap(desc, &tap)
         guard err == noErr else { throw NSError(domain: "tap", code: Int(err)) }
@@ -44,9 +50,12 @@ final class Tap {
         ]
         err = AudioHardwareCreateAggregateDevice(dict as CFDictionary, &agg)
         guard err == noErr else { throw NSError(domain: "aggregate", code: Int(err)) }
-        // Process taps deliver Float32 PCM; the aggregate inherits that format.
+        try start()
+    }
+    /// HAL input IOProcs deliver Float32 PCM in the device's virtual format; taps and microphones alike.
+    private func start() throws {
         let level = self.level
-        err = AudioDeviceCreateIOProcIDWithBlock(&proc, agg, nil) { _, inData, _, _, _ in
+        var err = AudioDeviceCreateIOProcIDWithBlock(&proc, agg, nil) { _, inData, _, _, _ in
             var sum: Float = 0; var n = 0
             for b in UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: inData)) {
                 guard let data = b.mData, b.mDataByteSize >= 4 else { continue }
@@ -61,6 +70,7 @@ final class Tap {
     }
     deinit {
         if let proc { AudioDeviceStop(agg, proc); AudioDeviceDestroyIOProcID(agg, proc) }
+        guard owned else { return }
         if agg != 0 { AudioHardwareDestroyAggregateDevice(agg) }
         if tap != 0 { AudioHardwareDestroyProcessTap(tap) }
     }
@@ -73,9 +83,9 @@ final class Tap {
 /// Chrome is media on purpose: Meet does not duck, and YouTube in Chrome must read as media.
 let callPrefixes = ["net.whatsapp.WhatsApp", "com.apple.FaceTime", "com.apple.avconferenced"]
 
-/// Names of visible microphones some process has running right now. CoreAudio does not say
+/// Visible microphones some process has running right now. CoreAudio does not say
 /// which process; kAudioProcessPropertyDevices came back empty on macOS 26.
-func micsInUse() -> [String] {
+func micsInUse() -> [AudioObjectID] {
     var a = addr(kAudioHardwarePropertyDevices); var size = UInt32(0)
     guard AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject), &a, 0, nil, &size) == noErr else { return [] }
     var devs = [AudioObjectID](repeating: 0, count: Int(size) / MemoryLayout<AudioObjectID>.size)
@@ -86,7 +96,7 @@ func micsInUse() -> [String] {
         return n > 0 && get(dev, kAudioDevicePropertyIsHidden, UInt32(0)) == 0
             && get(dev, kAudioDevicePropertyTransportType, UInt32(0)) != kAudioDeviceTransportTypeAggregate   // our own taps
             && get(dev, kAudioDevicePropertyDeviceIsRunningSomewhere, UInt32(0)) != 0
-    }.map { str($0, kAudioObjectPropertyName) }
+    }
 }
 
 /// "com.google.Chrome.helper" → "Chrome"; "com.apple.avconferenced" → "FaceTime".
@@ -108,12 +118,14 @@ func processObjects() -> [(AudioObjectID, String)]? {
 final class Model: ObservableObject {
     @Published var media: Float = -60
     @Published var call: Float = -60
+    @Published var mic: Float = -60
     @Published var device = ""
     @Published var rate = 0.0
     @Published var mics: [String] = []
     @Published var micApps = ""
     @Published var error = ""
-    private var mediaTap: Tap?, callTap: Tap?
+    private var mediaTap: Tap?, callTap: Tap?, micTap: Tap?
+    private let micLevel = Level()
     private var callObjects: Set<AudioObjectID> = []
     private var tick = 0
 
@@ -127,7 +139,7 @@ final class Model: ObservableObject {
         let out = defaultOutput()
         device = str(out, kAudioObjectPropertyName)
         rate = get(out, kAudioDevicePropertyNominalSampleRate, Double(0))
-        media = smooth(media, db(mediaTap)); call = smooth(call, db(callTap))
+        media = smooth(media, db(mediaTap)); call = smooth(call, db(callTap)); mic = smooth(mic, db(micTap))
     }
     private func db(_ tap: Tap?) -> Float { max(-60, 20 * log10(max(tap?.rms ?? 0, 1e-5))) }
     private func smooth(_ old: Float, _ new: Float) -> Float { new > old ? new : old * 0.85 + new * 0.15 }
@@ -138,9 +150,18 @@ final class Model: ObservableObject {
         guard let procs = processObjects() else { return }
         let me = ProcessInfo.processInfo.processIdentifier
         // Which mics are open, and which apps run input. A mic on the AirPods forces the headset profile.
-        mics = micsInUse()
+        // Drop our own mic reader first, so the probe sees only the mics other apps run.
+        micTap = nil
+        let micIds = micsInUse()
+        mics = micIds.map { str($0, kAudioObjectPropertyName) }
         micApps = Set(procs.filter { get($0.0, kAudioProcessPropertyIsRunningInput, UInt32(0)) != 0 && get($0.0, kAudioProcessPropertyPID, pid_t(0)) != me }
             .map { shortName($0.1) }).sorted().joined(separator: ", ")
+        // Meter the live mic only while another app runs input, so the meter never keeps a mic open by itself.
+        // ponytail: the reader restarts once a second; the shared Level hides the gap. First running mic wins.
+        if let want = micIds.first, !micApps.isEmpty {
+            do { micTap = try Tap(device: want, level: micLevel); if error.hasPrefix("mic:") { error = "" } }
+            catch { self.error = "mic: \(error.localizedDescription)" }
+        }
         let calls = Set(procs.filter { obj, bundle in
             callPrefixes.contains { bundle.hasPrefix($0) } && get(obj, kAudioProcessPropertyPID, pid_t(0)) != me
         }.map { $0.0 })
@@ -190,13 +211,9 @@ struct MeterView: View {
                 Text(quality.0).font(.system(size: 22, weight: .medium)).foregroundStyle(quality.1)
             }
             if !model.mics.isEmpty {
-                HStack(spacing: 14) {
-                    Text("Mic").font(.system(size: 22, weight: .semibold)).frame(width: 150, alignment: .leading)
-                    Text(model.mics.joined(separator: ", ")).font(.system(size: 22, weight: .medium))
-                        .foregroundStyle(model.mics.contains(model.device) ? .orange : .green).lineLimit(1)
-                }
+                Bar(title: "Mic", db: model.mic, color: model.mics.contains(model.device) ? .orange : .green)
             }
-            Text(model.micApps.isEmpty ? model.device : "\(model.device)  ·  mic open in \(model.micApps)")
+            Text(model.micApps.isEmpty ? model.device : "\(model.device)  ·  \(model.mics.joined(separator: ", ")) open in \(model.micApps)")
                 .font(.system(size: 14)).foregroundStyle(.secondary).lineLimit(1)
             if !model.error.isEmpty { Text(model.error).font(.system(size: 13)).foregroundStyle(.red) }
         }
