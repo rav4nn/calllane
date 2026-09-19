@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<installer-gui-script minSpecVersion="2">
+    <title>CallLane @VERSION@</title>
+    <welcome language="en" mime-type="text/plain"><![CDATA[CallLane stops call-audio ducking by routing your output through a virtual device.
+
+This installer puts CallLane.app in /Applications and the CallLane audio driver in the system audio folder. It restarts the audio daemon once to load the driver.
+
+After the install, open CallLane from /Applications.]]></welcome>
+    <license file="LICENSE" mime-type="text/plain"/>
+    <options customize="never" require-scripts="false"/>
+    <domains enable_anywhere="false" enable_currentUserHome="false" enable_localSystem="true"/>
+    <choices-outline>
+        <line choice="default"/>
+    </choices-outline>
+    <choice id="default" title="CallLane">
+        <pkg-ref id="dev.rav4nn.calllane"/>
+        <pkg-ref id="dev.rav4nn.calllane.driver"/>
+    </choice>
+    <pkg-ref id="dev.rav4nn.calllane" version="@VERSION@">CallLane-app.pkg</pkg-ref>
+    <pkg-ref id="dev.rav4nn.calllane.driver" version="@VERSION@">CallLaneDriver.pkg</pkg-ref>
+</installer-gui-script>

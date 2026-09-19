@@ -24,7 +24,10 @@ DRIVER_DEFINES = \
 	-DkLatency_Frame_Size=0 \
 	-DkSampleRates=48000
 
-.PHONY: build run test driver pkg install-driver uninstall-driver release snap clean
+DMG     = $(BUILD)/$(APP)-$(VERSION).dmg
+INST_PKG = $(BUILD)/$(APP).pkg
+
+.PHONY: build run test driver pkg install-driver uninstall-driver release dmg snap clean
 
 build:
 	swift build -c release
@@ -82,6 +85,22 @@ release: build pkg
 	cd $(BUILD)/dist && ditto -c -k --norsrc . ../$(APP).zip
 	shasum -a 256 $(BUILD)/$(APP).zip | tee $(BUILD)/sha256.txt
 	sed -e 's/@VERSION@/$(VERSION)/' -e "s/@SHA256@/$$(cut -d' ' -f1 $(BUILD)/sha256.txt)/" Casks/calllane.rb > $(BUILD)/calllane.rb
+
+# Combined installer: app → /Applications, driver → HAL dir, one admin-password prompt.
+dmg: build pkg
+	rm -rf $(BUILD)/installer-root && mkdir -p $(BUILD)/installer-root
+	cp -R $(BUNDLE) $(BUILD)/installer-root/
+	pkgbuild --root $(BUILD)/installer-root --component-plist Installer/app-component.plist \
+		--install-location /Applications --identifier dev.rav4nn.calllane \
+		--version $(VERSION) $(BUILD)/$(APP)-app.pkg
+	sed 's/@VERSION@/$(VERSION)/' Installer/distribution.xml > $(BUILD)/distribution.xml
+	productbuild --distribution $(BUILD)/distribution.xml \
+		--package-path $(BUILD) --resources . $(INST_PKG)
+	rm -rf $(BUILD)/dmg-stage && mkdir -p $(BUILD)/dmg-stage
+	cp $(INST_PKG) $(BUILD)/dmg-stage/
+	hdiutil create -volname "CallLane $(VERSION)" -srcfolder $(BUILD)/dmg-stage \
+		-fs HFS+ -format UDZO -imagekey zlib-level=9 -ov $(DMG)
+	@echo "$(DMG) ready."
 
 clean:
 	rm -rf .build $(BUILD)

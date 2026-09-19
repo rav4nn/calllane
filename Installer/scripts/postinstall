@@ -1,5 +1,4 @@
 #!/bin/sh
 # Restart the audio daemon so the new driver loads without a reboot.
-# coreaudiod is always running on a live system; exit 0 either way.
 /usr/bin/killall coreaudiod 2>/dev/null || true
 exit 0
