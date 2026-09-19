@@ -24,7 +24,7 @@ DRIVER_DEFINES = \
 	-DkLatency_Frame_Size=0 \
 	-DkSampleRates=48000
 
-DMG     = $(BUILD)/$(APP)-$(VERSION).dmg
+DMG     = $(BUILD)/$(APP).dmg
 INST_PKG = $(BUILD)/$(APP).pkg
 
 .PHONY: build run test driver pkg install-driver uninstall-driver release dmg snap clean

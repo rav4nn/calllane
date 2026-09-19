@@ -26,7 +26,7 @@ export default function Page() {
             quality by using your Mac&rsquo;s mic instead.
           </p>
           <div className="hero-actions">
-            <a className="btn btn-accent" href={`${REPO}/releases/latest`}>Download for Mac</a>
+            <a className="btn btn-accent" href={`${REPO}/releases/latest/download/CallLane.dmg`}>Download for Mac</a>
             <a className="btn btn-dark" href={REPO}>Source on GitHub</a>
           </div>
           <p className="hero-fine">macOS 14 or later &middot; No account &middot; No kernel extension</p>
@@ -126,7 +126,7 @@ export default function Page() {
                       enter your admin password. The installer puts the app
                       in /Applications and loads the audio driver.
                     </p>
-                    <a className="btn btn-accent btn-sm" href={`${REPO}/releases/latest`}>
+                    <a className="btn btn-accent btn-sm" href={`${REPO}/releases/latest/download/CallLane.dmg`}>
                       Download CallLane.dmg
                     </a>
                     <GatekeeperNote />
