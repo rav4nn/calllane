@@ -173,6 +173,8 @@ p { max-width: 62ch; }
   .swap .before { opacity: 0; }
   .fill.call { width: 78%; }
   .ducked .fill.music { width: 32%; }
+  .step-anim { animation: none; }
+  .gatekeeper-body { animation: none; }
 }
 
 /* ---------- Sections ---------- */
@@ -254,10 +256,100 @@ p { max-width: 62ch; }
 .setup-grid {
   display: grid; grid-template-columns: 1.2fr 1fr; gap: 2.5rem; align-items: center;
 }
-.setup-grid ol { padding-left: 1.3rem; max-width: 58ch; }
-.setup-grid li { margin-bottom: 1.25rem; line-height: 1.6; }
-.setup-grid li::marker { font-family: var(--font-display); font-weight: 600; color: var(--muted); }
-.note-text { display: block; font-size: .85rem; color: var(--muted); margin-top: .4rem; line-height: 1.55; }
+.install-steps { display: grid; gap: .75rem; max-width: 58ch; }
+.step {
+  display: grid; grid-template-columns: 2.2rem 1fr; gap: .75rem;
+  background: var(--card); border-radius: 16px; padding: 1.25rem 1.35rem;
+}
+.step-num {
+  width: 2.2rem; height: 2.2rem; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-display), Poppins, sans-serif;
+  font-weight: 700; font-size: .95rem;
+  background: var(--accent); color: var(--accent-ink);
+  flex-shrink: 0;
+}
+.step-body { line-height: 1.6; }
+.step-body strong { font-size: .95rem; }
+.step-desc { font-size: .88rem; color: var(--muted); margin: .25rem 0 0; max-width: none; }
+.btn-sm { padding: .55rem 1.2rem; font-size: .82rem; margin-top: .65rem; }
+
+.step-anim {
+  animation: step-in .5s ease both;
+}
+@keyframes step-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Gatekeeper explanation */
+.gatekeeper {
+  margin-top: .65rem; border-radius: 12px;
+  background: color-mix(in srgb, var(--blue) 6%, transparent);
+  overflow: hidden;
+}
+.gatekeeper-trigger {
+  display: flex; align-items: center; gap: .45rem;
+  padding: .7rem 1rem; cursor: pointer;
+  font-size: .82rem; font-weight: 500; color: var(--blue);
+  list-style: none;
+}
+.gatekeeper-trigger::-webkit-details-marker { display: none; }
+.gatekeeper-trigger::after {
+  content: ""; display: block;
+  width: .45rem; height: .45rem;
+  border-right: 1.5px solid var(--blue); border-bottom: 1.5px solid var(--blue);
+  transform: rotate(-45deg); transition: transform .2s;
+  margin-left: auto; flex-shrink: 0;
+}
+.gatekeeper[open] .gatekeeper-trigger::after { transform: rotate(45deg); }
+.shield-icon { flex-shrink: 0; }
+.gatekeeper-body {
+  padding: 0 1rem 1rem;
+  animation: gk-open .3s ease;
+}
+@keyframes gk-open {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.gatekeeper-body p {
+  font-size: .84rem; color: var(--muted); line-height: 1.6; max-width: none;
+  margin: 0 0 .6rem;
+}
+.gatekeeper-heading { font-weight: 600; color: var(--ink) !important; }
+.gatekeeper-steps {
+  list-style: none; padding: 0; display: grid; gap: .4rem; margin: .4rem 0 .65rem;
+}
+.gatekeeper-steps li {
+  display: flex; align-items: baseline; gap: .6rem;
+  font-size: .84rem; line-height: 1.55; color: var(--ink);
+}
+.gs-num {
+  width: 1.4rem; height: 1.4rem; border-radius: 50%; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--blue); color: white;
+  font-size: .7rem; font-weight: 700;
+  position: relative; top: .1rem;
+}
+.gatekeeper-fine { font-size: .8rem !important; color: var(--muted); margin-bottom: 0 !important; }
+.gatekeeper-fine code {
+  background: color-mix(in srgb, var(--blue) 10%, transparent);
+  padding: .1rem .35rem; border-radius: 4px; font-size: .78rem;
+}
+
+/* Homebrew alternative */
+.alt-install {
+  margin-top: 1rem; max-width: 58ch;
+}
+.alt-install summary {
+  cursor: pointer; font-size: .85rem; color: var(--muted); font-weight: 500;
+  list-style: none;
+}
+.alt-install summary::-webkit-details-marker { display: none; }
+.alt-install summary::before { content: "▸ "; }
+.alt-install[open] summary::before { content: "▾ "; }
+.alt-install pre { margin-top: .5rem; }
+
 pre {
   margin: .6rem 0 0; padding: .8rem 1rem; border-radius: 12px;
   background: var(--code-bg); color: var(--code-ink); overflow-x: auto;

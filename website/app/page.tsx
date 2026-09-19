@@ -26,7 +26,7 @@ export default function Page() {
             quality by using your Mac&rsquo;s mic instead.
           </p>
           <div className="hero-actions">
-            <a className="btn btn-accent" href="#install">Install with Homebrew</a>
+            <a className="btn btn-accent" href={`${REPO}/releases/latest`}>Download for Mac</a>
             <a className="btn btn-dark" href={REPO}>Source on GitHub</a>
           </div>
           <p className="hero-fine">macOS 14 or later &middot; No account &middot; No kernel extension</p>
@@ -116,30 +116,47 @@ export default function Page() {
           <div className="setup-grid">
             <div>
               <h2>Setup takes about a minute</h2>
-              <ol>
-                <li>
-                  <strong>Install with Homebrew.</strong> Three commands, one admin
-                  password prompt.
-                  <pre><code>{`brew trust --tap rav4nn/tap
-brew install --cask rav4nn/tap/calllane
-xattr -dr com.apple.quarantine /Applications/CallLane.app`}</code></pre>
-                  <span className="note-text">
-                    The last line is needed because CallLane is signed ad-hoc, not
-                    with an Apple Developer ID. Without it macOS says it cannot
-                    verify the app, and you must allow it once under
-                    Privacy &amp; Security. This is not a normal requirement for
-                    most Mac apps &mdash; notarization is planned.
-                  </span>
-                </li>
-                <li>
-                  <strong>In each call app, pick &ldquo;CallLane&rdquo; as the speaker.</strong>{" "}
-                  Once per app, before the call starts.
-                </li>
-                <li>
-                  <strong>Keep your headphones as the system output and turn on Lock input.</strong>{" "}
-                  That&rsquo;s it. The phone icon fills while a call is using CallLane.
-                </li>
-              </ol>
+              <div className="install-steps">
+                <div className="step step-anim" style={{ animationDelay: "0s" }}>
+                  <div className="step-num">1</div>
+                  <div className="step-body">
+                    <strong>Download and install.</strong>
+                    <p className="step-desc">
+                      Open the <code>.dmg</code>, double-click <code>CallLane.pkg</code>, and
+                      enter your admin password. The installer puts the app
+                      in /Applications and loads the audio driver.
+                    </p>
+                    <a className="btn btn-accent btn-sm" href={`${REPO}/releases/latest`}>
+                      Download CallLane.dmg
+                    </a>
+                    <GatekeeperNote />
+                  </div>
+                </div>
+
+                <div className="step step-anim" style={{ animationDelay: "0.12s" }}>
+                  <div className="step-num">2</div>
+                  <div className="step-body">
+                    <strong>In each call app, pick &ldquo;CallLane&rdquo; as the speaker.</strong>
+                    <p className="step-desc">Once per app, before the call starts.</p>
+                  </div>
+                </div>
+
+                <div className="step step-anim" style={{ animationDelay: "0.24s" }}>
+                  <div className="step-num">3</div>
+                  <div className="step-body">
+                    <strong>Keep your headphones as the system output and turn on Lock input.</strong>
+                    <p className="step-desc">
+                      That&rsquo;s it. The phone icon fills while a call uses CallLane.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <details className="alt-install">
+                <summary>Prefer Homebrew?</summary>
+                <pre><code>{`brew trust --tap rav4nn/tap
+brew install --cask rav4nn/tap/calllane`}</code></pre>
+              </details>
             </div>
             <figure className="screenshot">
               <img
@@ -155,9 +172,9 @@ xattr -dr com.apple.quarantine /Applications/CallLane.app`}</code></pre>
 
         <section className="section wrap beta-callout">
           <p className="beta-text">
-            <strong>Early open-source beta.</strong> CallLane is currently ad-hoc
-            signed, so macOS requires a one-time <code>xattr</code> step during
-            installation. Notarization is planned. If you try it on a different
+            <strong>Early open-source beta.</strong> CallLane is not yet notarized
+            with Apple, so macOS asks you to allow it once on first
+            open. Notarization is planned. If you try it on a different
             Mac, headset, or call app,{" "}
             <a href={`${REPO}/issues`}>feedback is welcome</a>.
           </p>
@@ -252,6 +269,54 @@ function Panel({ title, variant }: { title: string; variant: "ducked" | "lane" }
         </span>
       </div>
     </div>
+  );
+}
+
+function GatekeeperNote() {
+  return (
+    <details className="gatekeeper">
+      <summary className="gatekeeper-trigger">
+        <ShieldIcon />
+        macOS may say it can&rsquo;t verify CallLane &mdash; here&rsquo;s why, and how to allow&nbsp;it
+      </summary>
+      <div className="gatekeeper-body">
+        <p>
+          Apple shows this warning for any app that is not signed with a paid
+          Developer ID ($99/year). CallLane is open-source and free, so it uses
+          an ad-hoc signature instead. The app is safe &mdash; the full source
+          is on GitHub.
+        </p>
+        <p className="gatekeeper-heading">To allow it (one time only):</p>
+        <ol className="gatekeeper-steps">
+          <li>
+            <span className="gs-num">1</span>
+            Open <strong>System Settings</strong> and go to <strong>Privacy &amp; Security</strong>.
+          </li>
+          <li>
+            <span className="gs-num">2</span>
+            Scroll down. You will see <em>&ldquo;CallLane.pkg was blocked&rdquo;</em>.
+          </li>
+          <li>
+            <span className="gs-num">3</span>
+            Click <strong>Open Anyway</strong> and enter your password.
+          </li>
+        </ol>
+        <p className="gatekeeper-fine">
+          After this step, CallLane opens normally. You do not need to do this
+          again. If you prefer to skip the dialog entirely, run{" "}
+          <code>xattr -dr com.apple.quarantine CallLane.dmg</code> in Terminal
+          before you open the DMG.
+        </p>
+      </div>
+    </details>
+  );
+}
+
+function ShieldIcon() {
+  return (
+    <svg className="shield-icon" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="currentColor" d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z" />
+    </svg>
   );
 }
 
