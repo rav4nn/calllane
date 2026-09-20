@@ -52,6 +52,9 @@ protocol AudioSystem {
     func setDefaultInput(_ id: AudioObjectID) throws
     func volume(_ id: AudioObjectID, scope: AudioScope) -> Float?
     func setVolume(_ id: AudioObjectID, scope: AudioScope, _ value: Float) throws
+    /// The output mute control. The driver feeds the tap zeros while it is on.
+    func isMuted(_ id: AudioObjectID) -> Bool
+    func setMuted(_ id: AudioObjectID, _ value: Bool) throws
     func isRunningSomewhere(_ id: AudioObjectID) -> Bool
     /// Resolves a device UID; nil when no device has it. Finds hidden devices too.
     func deviceID(forUID uid: String) -> AudioObjectID?
@@ -63,8 +66,15 @@ protocol AudioSystem {
     /// Shows the system prompt once; `completion` runs on the main queue after the answer.
     func requestMicrophone(_ completion: @escaping () -> Void)
     func destroyAggregate(_ id: AudioObjectID) throws
-    /// Returns nil when CoreAudio refuses the registration.
-    func listen(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector, _ handler: @escaping () -> Void) -> ListenerToken?
+    /// Returns nil when CoreAudio refuses the registration. The scope must be the one the
+    /// property changes on: a listener on the global scope never hears a device's mute.
+    func listen(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector, scope: AudioObjectPropertyScope, _ handler: @escaping () -> Void) -> ListenerToken?
+}
+
+extension AudioSystem {
+    func listen(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector, _ handler: @escaping () -> Void) -> ListenerToken? {
+        listen(object, selector, scope: kAudioObjectPropertyScopeGlobal, handler)
+    }
 }
 
 final class CoreAudioSystem: AudioSystem {
@@ -171,6 +181,14 @@ final class CoreAudioSystem: AudioSystem {
         }
     }
 
+    func isMuted(_ id: AudioObjectID) -> Bool {
+        (get(id, address(kAudioDevicePropertyMute, AudioScope.output.raw), UInt32(0)) ?? 0) != 0
+    }
+
+    func setMuted(_ id: AudioObjectID, _ value: Bool) throws {
+        try set(id, address(kAudioDevicePropertyMute, AudioScope.output.raw), UInt32(value ? 1 : 0), what: "set mute")
+    }
+
     func isRunningSomewhere(_ id: AudioObjectID) -> Bool {
         (get(id, address(kAudioDevicePropertyDeviceIsRunningSomewhere), UInt32(0)) ?? 0) != 0
     }
@@ -225,8 +243,8 @@ final class CoreAudioSystem: AudioSystem {
         if status != noErr { throw AudioError(what: "destroy aggregate", status: status) }
     }
 
-    func listen(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector, _ handler: @escaping () -> Void) -> ListenerToken? {
-        let addr = address(selector)
+    func listen(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector, scope: AudioObjectPropertyScope, _ handler: @escaping () -> Void) -> ListenerToken? {
+        let addr = address(selector, scope)
         let block: AudioObjectPropertyListenerBlock = { _, _ in handler() }
         var a = addr
         let status = AudioObjectAddPropertyListenerBlock(object, &a, .main, block)

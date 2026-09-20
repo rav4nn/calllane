@@ -22,7 +22,7 @@ final class Controller {
     /// Monotonic: a clock that jumps backwards must not extend the heal's window.
     private let now: () -> ContinuousClock.Instant
     private var tokens: [ListenerToken] = []
-    private var runningToken: ListenerToken?
+    private var callsTokens: [ListenerToken] = []
     private var runningWatched: AudioObjectID?
     private var pending: DispatchWorkItem?
     /// The last real output the user had; where the system output goes back to when CallLane
@@ -185,7 +185,7 @@ final class Controller {
         if restarted {
             restarted = false
             engine.stop()          // the units point at devices that no longer exist
-            runningToken = nil
+            callsTokens = []
             runningWatched = nil   // force a fresh registration even on an unchanged id
         }
         refresh()
@@ -193,6 +193,7 @@ final class Controller {
         healOutputAfterRestart()
         migrateLegacy()
         keepCallsOffSystemOutput()
+        keepCallsUnmuted()
         reconcileInputLock()
         refresh()
         outputVolume = defaultOutputID.flatMap { audio.volume($0, scope: .output) }
@@ -201,19 +202,23 @@ final class Controller {
         watchRunning()
     }
 
-    /// A call app opening CallLane fires no system-level event, so watch the device itself.
+    /// A call app opening CallLane fires no system-level event, and neither does a mute of it,
+    /// so watch the device itself.
     /// A coreaudiod restart is NOT guaranteed to change the device id, so the id alone cannot
     /// tell us the listener died: `reconcile` clears `runningWatched` on the restart event.
     private func watchRunning() {
         guard callsDevice?.id != runningWatched else { return }
         // This may run inside the old token's own listener block; CoreAudio deadlocks if the
         // block is removed from within itself, so let it return first.
-        if let old = runningToken { DispatchQueue.main.async { _ = old } }
-        runningToken = nil
+        let old = callsTokens
+        if !old.isEmpty { DispatchQueue.main.async { _ = old } }
+        callsTokens = []
         runningWatched = nil
         guard let calls = callsDevice else { return }
-        runningToken = audio.listen(calls.id, kAudioDevicePropertyDeviceIsRunningSomewhere) { [weak self] in self?.reconcile() }
-        if runningToken != nil { runningWatched = calls.id }   // a failed registration retries next reconcile
+        let watched = [(kAudioDevicePropertyDeviceIsRunningSomewhere, kAudioObjectPropertyScopeGlobal),
+                       (kAudioDevicePropertyMute, AudioScope.output.raw)]
+        callsTokens = watched.compactMap { audio.listen(calls.id, $0.0, scope: $0.1) { [weak self] in self?.reconcile() } }
+        if callsTokens.count == watched.count { runningWatched = calls.id }   // a failed registration retries next reconcile
     }
 
     private func refresh() {
@@ -297,6 +302,14 @@ final class Controller {
         if attempt("Could not leave CallLane", { try audio.setDefaultOutput(real.id) }) {
             status = "CallLane is for call apps only. Output set back to \(real.name)."
         }
+    }
+
+    /// A muted CallLane makes the driver feed the tap zeros: the call goes silent with no error.
+    /// Nothing in the app sets the flag, and no picker shows it, so the user cannot find it.
+    /// `watchRunning` listens for the flag, so a mute in the middle of a call is undone at once.
+    private func keepCallsUnmuted() {
+        guard let calls = callsDevice, audio.isMuted(calls.id) else { return }
+        attempt("Could not unmute CallLane", { try audio.setMuted(calls.id, false) })
     }
 
     private func requestMicrophoneIfNeeded() {
