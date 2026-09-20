@@ -43,6 +43,24 @@ import CoreAudio
         #expect(c.defaultOutputDevice?.id == airpods)
     }
 
+    // MARK: a muted CallLane device is a silent call
+
+    @Test func unmutesCallsDevice() {
+        fake.muted.insert(calls)
+        _ = makeController()
+        #expect(!fake.muted.contains(calls))
+    }
+
+    @Test func unmutesCallsDeviceWhenMutedLater() {
+        let c = makeController()
+        fake.muted.insert(calls)
+        fake.handlers[calls]?[kAudioDevicePropertyMute]?()
+        #expect(!fake.muted.contains(calls))
+        // The driver changes mute on the output scope; a global listener never fires.
+        #expect(fake.listenLog.contains { $0.object == calls && $0.selector == kAudioDevicePropertyMute && $0.scope == kAudioObjectPropertyScopeOutput })
+        withExtendedLifetime(c) {}   // the listener holds the controller weakly
+    }
+
     // MARK: CallLane must never be the system output
 
     @Test func callsAsDefaultOutputRevertsToPreviousOutput() {

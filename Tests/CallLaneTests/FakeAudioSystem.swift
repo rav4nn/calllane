@@ -8,12 +8,13 @@ final class FakeAudioSystem: AudioSystem {
     var volumes: [AudioObjectID: Float] = [:]
     var inputVolumes: [AudioObjectID: Float] = [:]
     var running: Set<AudioObjectID> = []
+    var muted: Set<AudioObjectID> = []
     var nextID: AudioObjectID = 1000
     var handlers: [AudioObjectID: [AudioObjectPropertySelector: () -> Void]] = [:]
     /// Every `setDefaultOutput`, in order.
     var outputSets: [AudioObjectID] = []
     /// Every registration, in order. `handlers` overwrites; this shows a re-registration.
-    var listenLog: [(object: AudioObjectID, selector: AudioObjectPropertySelector)] = []
+    var listenLog: [(object: AudioObjectID, selector: AudioObjectPropertySelector, scope: AudioObjectPropertyScope)] = []
     var failSetDefaultInput = false
     var failSetDefaultOutput = false
     var installedDriverVersion: String? = "0.2.0"
@@ -52,15 +53,19 @@ final class FakeAudioSystem: AudioSystem {
     func setVolume(_ id: AudioObjectID, scope: AudioScope, _ value: Float) throws {
         if scope == .output { volumes[id] = value } else { inputVolumes[id] = value }
     }
+    func isMuted(_ id: AudioObjectID) -> Bool { muted.contains(id) }
+    func setMuted(_ id: AudioObjectID, _ value: Bool) throws {
+        if value { muted.insert(id) } else { muted.remove(id) }
+    }
     func isRunningSomewhere(_ id: AudioObjectID) -> Bool { running.contains(id) }
     func deviceID(forUID uid: String) -> AudioObjectID? { list.first { $0.uid == uid }?.id }
     func driverVersion() -> String? { installedDriverVersion }
     func microphoneAllowed() -> Bool? { micAllowed }
     func requestMicrophone(_ completion: @escaping () -> Void) { micRequests += 1; pendingMic = completion }
     func destroyAggregate(_ id: AudioObjectID) throws { remove(id) }
-    func listen(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector, _ handler: @escaping () -> Void) -> ListenerToken? {
+    func listen(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector, scope: AudioObjectPropertyScope, _ handler: @escaping () -> Void) -> ListenerToken? {
         handlers[object, default: [:]][selector] = handler
-        listenLog.append((object, selector))
+        listenLog.append((object, selector, scope))
         return ListenerToken.fake()
     }
 
