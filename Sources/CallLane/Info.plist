@@ -7,8 +7,8 @@
     <key>CFBundleIdentifier</key><string>dev.rav4nn.calllane</string>
     <key>CFBundleExecutable</key><string>CallLane</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.3.1</string>
-    <key>CFBundleVersion</key><string>4</string>
+    <key>CFBundleShortVersionString</key><string>0.3.2</string>
+    <key>CFBundleVersion</key><string>5</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>LSUIElement</key><true/>
     <key>NSMicrophoneUsageDescription</key><string>CallLane reads its own hidden tap device like a microphone to copy call audio onto your headphones. It never records your real microphone.</string>
