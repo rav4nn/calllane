@@ -8,7 +8,7 @@ let package = Package(
         .executableTarget(
             name: "CallLane",
             path: "Sources/CallLane",
-            exclude: ["Info.plist"]
+            exclude: ["Info.plist", "CallLane.entitlements"]
         ),
         .testTarget(
             name: "CallLaneTests",
