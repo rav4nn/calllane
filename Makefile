@@ -27,7 +27,13 @@ DRIVER_DEFINES = \
 DMG     = $(BUILD)/$(APP).dmg
 INST_PKG = $(BUILD)/$(APP).pkg
 
-.PHONY: build run test driver pkg install-driver uninstall-driver release dmg snap clean
+# Release: make notarize SIGN="Developer ID Application: …" PKG_SIGN="Developer ID Installer: …".
+# The default "-" is an ad-hoc signature (local builds and CI); it gets no hardened runtime.
+SIGN     ?= -
+PKG_SIGN ?=
+CODESIGN = codesign --force --sign "$(SIGN)" $(if $(filter -,$(SIGN)),,--options runtime --timestamp)
+
+.PHONY: build run test driver pkg install-driver uninstall-driver release dmg notarize snap clean
 
 build:
 	swift build -c release
@@ -35,7 +41,7 @@ build:
 	mkdir -p $(BUNDLE)/Contents/MacOS
 	cp $(BIN) $(BUNDLE)/Contents/MacOS/$(APP)
 	cp Sources/$(APP)/Info.plist $(BUNDLE)/Contents/Info.plist
-	codesign --force --sign - $(BUNDLE)
+	$(CODESIGN) --entitlements Sources/$(APP)/$(APP).entitlements $(BUNDLE)
 
 run: build
 	open $(BUNDLE)
@@ -55,7 +61,7 @@ driver:
 	sed 's/@VERSION@/$(VERSION)/' Driver/Info.plist > $(DRIVER)/Contents/Info.plist
 	mkdir -p $(DRIVER)/Contents/Resources
 	cp Driver/LICENSE Driver/NOTICE $(DRIVER)/Contents/Resources/   # GPL-3: the licence ships with the binary
-	codesign --force --sign - $(DRIVER)
+	$(CODESIGN) $(DRIVER)
 
 # --root with a fixed component plist: a plain --component pkg is relocatable, and Installer
 # could then update a stray build/CallLane.driver instead of the HAL folder.
@@ -95,12 +101,20 @@ dmg: build pkg
 		--version $(VERSION) $(BUILD)/$(APP)-app.pkg
 	sed 's/@VERSION@/$(VERSION)/' Installer/distribution.xml > $(BUILD)/distribution.xml
 	productbuild --distribution $(BUILD)/distribution.xml \
-		--package-path $(BUILD) --resources . $(INST_PKG)
+		--package-path $(BUILD) --resources . $(if $(PKG_SIGN),--sign "$(PKG_SIGN)") $(INST_PKG)
 	rm -rf $(BUILD)/dmg-stage && mkdir -p $(BUILD)/dmg-stage
 	cp $(INST_PKG) $(BUILD)/dmg-stage/
 	hdiutil create -volname "CallLane $(VERSION)" -srcfolder $(BUILD)/dmg-stage \
 		-fs HFS+ -format UDZO -imagekey zlib-level=9 -ov $(DMG)
+	$(if $(filter -,$(SIGN)),,codesign --force --sign "$(SIGN)" --timestamp $(DMG))
 	@echo "$(DMG) ready."
+
+# One-time setup: xcrun notarytool store-credentials calllane (Apple ID or App Store Connect key).
+# Apple rejects ad-hoc code and an unsigned .pkg, so both identities must be set.
+notarize: dmg
+	test "$(SIGN)" != - && test -n "$(PKG_SIGN)"
+	xcrun notarytool submit $(DMG) --keychain-profile calllane --wait
+	xcrun stapler staple $(DMG)
 
 clean:
 	rm -rf .build $(BUILD)
