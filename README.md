@@ -4,7 +4,7 @@
 
 > This repository holds the documentation, release notes and the issue tracker for CallLane. The app is a paid, closed-source product. The audio driver it uses is open source at [rav4nn/calllane-driver](https://github.com/rav4nn/calllane-driver) (GPL-3.0).
 
-## The two problems it fixes
+## The problems it fixes
 
 ### 1. Music and video go quiet when a call starts (audio ducking)
 
@@ -17,6 +17,10 @@ When a call app starts voice processing (echo cancellation for your mic), macOS 
 When any app opens the AirPods microphone, Bluetooth switches from the high-quality listening profile (AAC, stereo) to the two-way headset profile (16 kHz mono). Music and the other person's voice start to sound like an old phone line. This happens with calls and with dictation apps such as **Wispr Flow, Superwhisper and MacWhisper**.
 
 **How CallLane fixes it:** it locks the input to the mic you pick, for example the MacBook's built-in mic. If another app or macOS moves the input back to the AirPods, CallLane puts your mic back. The AirPods never leave high-quality mode.
+
+### 3. A call is too quiet, or too loud, next to your music
+
+Your Mac's volume moves everything you hear. Since version 1.0.7, CallLane's menu bar panel has a **Call** slider that sets only the call's loudness, from 0% to 400%, so you can boost a quiet caller or set the call under your music. A limiter keeps a boost from clipping, and the slider snaps back to 100%. The mute button next to it silences the other side of the call while music keeps playing. It is one call volume control, not a per-app mixer: for per-app volume, use SoundSource or SoundDial.
 
 ## Works with
 
@@ -42,6 +46,7 @@ One-time purchase, no subscription. One license key works on up to 3 Macs. Free 
 - [WhatsApp calls make everything else quiet on a Mac](https://calllane.app/whatsapp-call-lowers-volume-mac)
 - [Why AirPods sound bad during calls on a Mac](https://calllane.app/airpods-sound-bad-during-calls-mac)
 - [VoiceOver audio ducking doesn't stop call ducking](https://calllane.app/voiceover-audio-ducking-not-working)
+- [Call too quiet on your Mac? How to make the caller louder](https://calllane.app/call-too-quiet-mac)
 
 ## FAQ
 
@@ -58,7 +63,10 @@ The dictation app opens the AirPods mic each time you dictate. Lock the input to
 No. Audio stays on your Mac. CallLane has no account and no analytics.
 
 **Does it replace SoundSource or Audio Hijack?**
-No. Those are general audio tools. CallLane does one job: calls without ducking and without headset mode.
+No. Those are general audio tools with a volume for each app. CallLane does one job: calls without ducking and without headset mode, plus one volume control for the call.
+
+**Can I make a quiet caller louder?**
+Yes, since 1.0.7. Move the Call slider in CallLane's panel above 100% (up to 400%). Your music stays where it is.
 
 ## Report a bug
 
